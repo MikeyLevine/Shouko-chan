@@ -40,7 +40,8 @@ cogs = [
     'cogs.general.shutdown',
     'cogs.general.welcome',
     'cogs.general.embed',
-    'cogs.general.membercount'  # Add this line to load the membercount cog
+    'cogs.general.membercount',
+    'cogs.general.presence'  # Add this line to load the presence cog
 ]
 
 @bot.event
