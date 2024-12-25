@@ -21,11 +21,17 @@ class Presence(commands.Cog):
     async def invite(self, ctx):
         embed = discord.Embed(
             title="In Development",
-            description="Join our server",
+            description="Our bot is currently in development! Stay tuned for updates.",
             color=discord.Color.blue()
         )
-        button = discord.ui.Button(label="Join", url="https://discord.gg/4tp457CRD8")
-
+        embed.add_field(
+            name="Join Our Community",
+            value="We'd love to have you! Join our server and provide feedback or help with development.",
+            inline=False
+        )
+        
+        # Button with the Discord invite link
+        button = discord.ui.Button(label="Join Now", url="https://discord.gg/4tp457CRD8")
         view = discord.ui.View()
         view.add_item(button)
 
