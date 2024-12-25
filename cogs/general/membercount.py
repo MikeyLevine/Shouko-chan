@@ -26,7 +26,14 @@ class MemberCount(commands.Cog):
                 if channel:
                     await channel.edit(name=stat_value)
                 else:
-                    await guild.create_text_channel(stat_value)
+                    channel = await guild.create_text_channel(stat_value)
+
+                # Set permissions to make the channel read-only for everyone except the bot
+                overwrite = {
+                    guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False),
+                    guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+                }
+                await channel.edit(overwrites=overwrite)
 
     @app_commands.command(name="membercount", description="Display server statistics")
     @app_commands.checks.has_permissions(administrator=True)
