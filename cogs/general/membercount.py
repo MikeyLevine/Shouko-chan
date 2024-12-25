@@ -1,14 +1,27 @@
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
+import json
+import os
 
 class MemberCount(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.channel_ids = self.load_channel_ids()
         self.update_stats.start()
 
     def cog_unload(self):
         self.update_stats.cancel()
+
+    def load_channel_ids(self):
+        if os.path.exists("channel_ids.json"):
+            with open("channel_ids.json", "r") as f:
+                return json.load(f)
+        return {}
+
+    def save_channel_ids(self):
+        with open("channel_ids.json", "w") as f:
+            json.dump(self.channel_ids, f)
 
     @tasks.loop(minutes=5)
     async def update_stats(self):
@@ -21,19 +34,26 @@ class MemberCount(commands.Cog):
             }
 
             for stat_name, stat_value in stats_channels.items():
-                # Find existing channel or create a new one
-                channel = discord.utils.get(guild.voice_channels, name__startswith=stat_name)
-                if channel:
-                    await channel.edit(name=stat_value)
+                channel_id = self.channel_ids.get(f"{guild.id}_{stat_name}")
+                if channel_id:
+                    channel = guild.get_channel(channel_id)
+                    if channel:
+                        await channel.edit(name=stat_value)
+                    else:
+                        new_channel = await guild.create_voice_channel(stat_value)
+                        self.channel_ids[f"{guild.id}_{stat_name}"] = new_channel.id
                 else:
-                    channel = await guild.create_voice_channel(stat_value)
+                    new_channel = await guild.create_voice_channel(stat_value)
+                    self.channel_ids[f"{guild.id}_{stat_name}"] = new_channel.id
 
                 # Set permissions to make the channel visible but not joinable for everyone except the bot
                 overwrite = {
                     guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=False),
                     guild.me: discord.PermissionOverwrite(view_channel=True, connect=True)
                 }
-                await channel.edit(overwrites=overwrite)
+                await new_channel.edit(overwrites=overwrite)
+
+        self.save_channel_ids()
 
     @app_commands.command(name="membercount", description="Display server statistics")
     @app_commands.checks.has_permissions(administrator=True)
