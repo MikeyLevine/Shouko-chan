@@ -20,11 +20,11 @@ class Presence(commands.Cog):
     @commands.command(name="invite", description="Get the bot invite link")
     async def invite(self, ctx):
         embed = discord.Embed(
-            title="Invite Link",
-            description="Click the button below to invite the bot to your server.",
+            title="In Development",
+            description="Join our server",
             color=discord.Color.blue()
         )
-        button = discord.ui.Button(label="Invite", url="https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot&permissions=268748622")
+        button = discord.ui.Button(label="Join", url="https://discord.gg/4tp457CRD8")
 
         view = discord.ui.View()
         view.add_item(button)

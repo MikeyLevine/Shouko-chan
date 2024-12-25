@@ -22,16 +22,16 @@ class MemberCount(commands.Cog):
 
             for stat_name, stat_value in stats_channels.items():
                 # Find existing channel or create a new one
-                channel = discord.utils.get(guild.channels, name__startswith=stat_name)
+                channel = discord.utils.get(guild.voice_channels, name__startswith=stat_name)
                 if channel:
                     await channel.edit(name=stat_value)
                 else:
-                    channel = await guild.create_text_channel(stat_value)
+                    channel = await guild.create_voice_channel(stat_value)
 
-                # Set permissions to make the channel read-only for everyone except the bot
+                # Set permissions to make the channel visible but not joinable for everyone except the bot
                 overwrite = {
-                    guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False),
-                    guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+                    guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=False),
+                    guild.me: discord.PermissionOverwrite(view_channel=True, connect=True)
                 }
                 await channel.edit(overwrites=overwrite)
 
