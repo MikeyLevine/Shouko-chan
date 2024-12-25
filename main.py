@@ -37,7 +37,9 @@ cogs = [
     'cogs.general.reaction_roles',
     'cogs.general.richpresence',
     'cogs.general.hmtai',
-    'cogs.general.shutdown'
+    'cogs.general.shutdown',
+    'cogs.general.welcome',
+    'cogs.general.embed'  # Add this line to load the embed cog
 ]
 
 @bot.event
