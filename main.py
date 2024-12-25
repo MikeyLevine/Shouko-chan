@@ -39,7 +39,8 @@ cogs = [
     'cogs.general.hmtai',
     'cogs.general.shutdown',
     'cogs.general.welcome',
-    'cogs.general.embed'  # Ensure this line is present to load the embed cog
+    'cogs.general.embed',
+    'cogs.general.membercount'  # Add this line to load the membercount cog
 ]
 
 @bot.event
