@@ -42,7 +42,8 @@ cogs = [
     'cogs.general.embed',
     'cogs.general.membercount',
     'cogs.general.warnings',
-    'cogs.general.afk'  
+    'cogs.general.afk',
+    'cogs.general.invite'  # Add this line to load the invite cog
 ]
 
 @bot.event
