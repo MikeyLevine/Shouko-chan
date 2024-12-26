@@ -41,7 +41,7 @@ cogs = [
     'cogs.general.welcome',
     'cogs.general.embed',
     'cogs.general.membercount',
-    'cogs.general.presence'  # Add this line to load the presence cog
+    'cogs.general.warnings'  
 ]
 
 @bot.event
