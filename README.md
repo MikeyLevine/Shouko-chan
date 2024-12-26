@@ -4,6 +4,9 @@ Welcome to Shouko-chan's official repository! 🚀
 
 **Shouko-chan** is my first-ever Discord bot built to improve my programming skills. It's currently in early development, so stay tuned for new features and improvements! 🛠️
 
+**Join our community on Discord:** [LINK](https://discord.gg/4tp457CRD8)
+
+
 ---
 
 ## 🚀 Features:
