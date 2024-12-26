@@ -33,7 +33,7 @@ cogs = [
     'cogs.general.weather',
     'cogs.general.crypto',
     'cogs.general.inandout',
-    'cogs.general.help',
+    'cogs.general.help',  # Ensure this line is present to load the help cog
     'cogs.general.reaction_roles',
     # 'cogs.general.richpresence',  # Comment out this line to disable richpresence
     'cogs.general.hmtai',
