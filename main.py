@@ -4,6 +4,7 @@ import os
 import json
 from dotenv import load_dotenv
 import asyncio
+import traceback
 
 load_dotenv()
 
@@ -29,11 +30,11 @@ cogs = [
     'cogs.general.poll',
     'cogs.general.jokes',
     'cogs.moderation.moderation',
-    'cogs.logging',
+    'cogs.moderation.logs',  # Ensure this line to load the logs cog from the moderation folder
     'cogs.general.weather',
     'cogs.general.crypto',
     'cogs.general.inandout',
-    'cogs.general.help',  # Ensure this line is present to load the help cog
+    'cogs.general.help',
     'cogs.general.reaction_roles',
     # 'cogs.general.richpresence',  # Comment out this line to disable richpresence
     'cogs.general.hmtai',
@@ -43,7 +44,7 @@ cogs = [
     'cogs.general.membercount',
     'cogs.general.warnings',
     'cogs.general.afk',
-    'cogs.general.invite'  # Add this line to load the invite cog
+    'cogs.general.invite'
 ]
 
 @bot.event
@@ -58,8 +59,11 @@ async def on_ready():
             try:
                 await bot.load_extension(cog)
                 loaded_cogs.append(cog)
+                print(f"Loaded cog: {cog}")  # Debug print
             except Exception as e:
                 failed_cogs.append((cog, str(e)))
+                print(f"Failed to load cog: {cog}, Error: {e}")  # Debug print
+                traceback.print_exc()  # Print the full traceback for detailed error information
 
         print("\nSummary of Cog Loading:")
         print(f"Successfully loaded cogs: {', '.join(loaded_cogs)}")
