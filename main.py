@@ -38,10 +38,11 @@ cogs = [
     # 'cogs.general.richpresence',  # Comment out this line to disable richpresence
     'cogs.general.hmtai',
     'cogs.general.shutdown',
-    'cogs.general.welcome',  # Ensure this line is present to load the welcome cog
+    'cogs.general.welcome',
     'cogs.general.embed',
     'cogs.general.membercount',
-    'cogs.general.warnings'  # Add this line to load the warnings cog
+    'cogs.general.warnings',
+    'cogs.general.afk'  
 ]
 
 @bot.event
