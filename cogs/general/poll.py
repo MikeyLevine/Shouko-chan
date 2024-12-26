@@ -6,7 +6,7 @@ class Poll(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="poll", description="Create a poll")
+    @app_commands.command(name="poll", description="Create a poll with up to 4 options. Provide a question and up to 4 options for users to vote on.")
     async def poll(self, interaction: discord.Interaction, question: str, option1: str, option2: str, option3: str = None, option4: str = None):
         embed = discord.Embed(title="Poll", description=question, color=discord.Color.blue())
         
