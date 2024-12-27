@@ -14,6 +14,7 @@ welcome_message = config.get('welcome_message', 'Welcome to the server, {member}
 goodbye_message = config.get('goodbye_message', 'Goodbye, {member}. We will miss you!')
 log_channel_id = config.get('log_channel_id')
 welcome_channel_id = config.get('welcome_channel_id')
+announcement_channel_id = config.get('announcement_channel_id')
 
 token = os.getenv('TOKEN')
 
@@ -43,7 +44,10 @@ cogs = [
     'cogs.general.membercount',
     'cogs.general.warnings',
     'cogs.general.afk',
-    'cogs.general.invite'  # Add this line to load the invite cog
+    'cogs.general.invite',  # Add this line to load the invite cog
+    'cogs.general.leveling',  # Add this line to load the leveling cog
+    'cogs.general.owner_commands',  # Add this line to load the owner commands cog
+    'cogs.general.setupdm'  # Add this line to load the setupdm cog
 ]
 
 @bot.event
@@ -60,6 +64,7 @@ async def on_ready():
                 loaded_cogs.append(cog)
             except Exception as e:
                 failed_cogs.append((cog, str(e)))
+                print(f"Failed to load cog {cog}: {e}")
 
         print("\nSummary of Cog Loading:")
         print(f"Successfully loaded cogs: {', '.join(loaded_cogs)}")
@@ -75,6 +80,24 @@ async def on_ready():
             print(f'Failed to sync slash commands: {e}')
         
         print("All commands loaded successfully!")
+
+@bot.event
+async def on_member_join(member):
+    if welcome_channel_id:
+        channel = bot.get_channel(welcome_channel_id)
+        if channel:
+            await channel.send(welcome_message.format(member=member.mention))
+    if announcement_channel_id:
+        channel = bot.get_channel(announcement_channel_id)
+        if channel:
+            await channel.send(f"{member.mention} has joined the server!")
+
+@bot.event
+async def on_member_remove(member):
+    if welcome_channel_id:
+        channel = bot.get_channel(welcome_channel_id)
+        if channel:
+            await channel.send(goodbye_message.format(member=member.mention))
 
 async def main():
     try:
