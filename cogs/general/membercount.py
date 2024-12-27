@@ -75,51 +75,69 @@ class MemberCount(commands.Cog):
             select = discord.ui.Select(placeholder="Choose statistics...", options=options, max_values=len(options))
 
             async def select_callback(interaction: discord.Interaction):
-                guild = interaction.guild
-                messages = []
-                for value in select.values:
-                    if value == "Member Count":
-                        count = guild.member_count
-                        messages.append(f"Total members: {count}")
-                    elif value == "Bot Count":
-                        count = sum(1 for member in guild.members if member.bot)
-                        messages.append(f"Total bots: {count}")
-                    elif value == "Channels Count":
-                        count = len(guild.channels)
-                        messages.append(f"Total channels: {count}")
-                    elif value == "Server Creation Date":
-                        creation_date = guild.created_at.strftime("%Y-%m-%d %H:%M:%S")
-                        messages.append(f"Server creation date: {creation_date}")
+                try:
+                    guild = interaction.guild
+                    messages = []
+                    for value in select.values:
+                        if value == "Member Count":
+                            count = guild.member_count
+                            messages.append(f"Total members: {count}")
+                        elif value == "Bot Count":
+                            count = sum(1 for member in guild.members if member.bot)
+                            messages.append(f"Total bots: {count}")
+                        elif value == "Channels Count":
+                            count = len(guild.channels)
+                            messages.append(f"Total channels: {count}")
+                        elif value == "Server Creation Date":
+                            creation_date = guild.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                            messages.append(f"Server creation date: {creation_date}")
 
-                # Create a new embed with the selected statistics
-                result_embed = discord.Embed(
-                    title="Selected Statistics",
-                    description="\n".join(messages),
-                    color=discord.Color.green()
-                )
+                    # Create a new embed with the selected statistics
+                    result_embed = discord.Embed(
+                        title="Selected Statistics",
+                        description="\n".join(messages),
+                        color=discord.Color.green()
+                    )
 
-                # Add a text input for the goal number
-                goal_input = discord.ui.TextInput(
-                    label="Enter the goal number:",
-                    placeholder="e.g., 1000",
-                    style=discord.TextStyle.short
-                )
+                    # Add a button to create the channels
+                    done_button = discord.ui.Button(label="Create", style=discord.ButtonStyle.primary)
 
-                # Add a button to submit the goal number
-                done_button = discord.ui.Button(label="Done", style=discord.ButtonStyle.primary)
+                    async def done_callback(interaction: discord.Interaction):
+                        try:
+                            # Find or create the "Server Stats" category
+                            category = discord.utils.get(guild.categories, name="Server Stats")
+                            if not category:
+                                category = await guild.create_category("Server Stats", position=0)
+                            else:
+                                await category.edit(position=0)
 
-                async def done_callback(interaction: discord.Interaction):
-                    goal_number = goal_input.value
-                    result_embed.add_field(name="Goal", value=f"🏆 {goal_number}", inline=False)
-                    await interaction.response.edit_message(embed=result_embed, view=None)
+                            # Create locked voice channels under the "Server Stats" category
+                            for message in messages:
+                                channel_name = message.split(":")[0]
+                                channel_value = message.split(":")[1].strip()
+                                new_channel = await guild.create_voice_channel(
+                                    name=f"{channel_name}: {channel_value}",
+                                    category=category
+                                )
+                                # Set permissions to make the channel visible but not joinable for everyone except the bot
+                                overwrite = {
+                                    guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=False),
+                                    guild.me: discord.PermissionOverwrite(view_channel=True, connect=True)
+                                }
+                                await new_channel.edit(overwrites=overwrite)
 
-                done_button.callback = done_callback
+                            await interaction.response.edit_message(embed=result_embed, view=None)
+                        except Exception as e:
+                            await interaction.response.send_message(f"An error occurred in done_callback: {e}", ephemeral=True)
 
-                view = discord.ui.View()
-                view.add_item(goal_input)
-                view.add_item(done_button)
+                    done_button.callback = done_callback
 
-                await interaction.response.send_message(embed=result_embed, view=view, ephemeral=True)
+                    view = discord.ui.View()
+                    view.add_item(done_button)
+
+                    await interaction.response.send_message(embed=result_embed, view=view, ephemeral=True)
+                except Exception as e:
+                    await interaction.response.send_message(f"An error occurred in select_callback: {e}", ephemeral=True)
 
             select.callback = select_callback
 
