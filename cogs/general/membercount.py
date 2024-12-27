@@ -42,16 +42,21 @@ class MemberCount(commands.Cog):
                     else:
                         new_channel = await guild.create_voice_channel(stat_value)
                         self.channel_ids[f"{guild.id}_{stat_name}"] = new_channel.id
+                        # Set permissions to make the channel visible but not joinable for everyone except the bot
+                        overwrite = {
+                            guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=False),
+                            guild.me: discord.PermissionOverwrite(view_channel=True, connect=True)
+                        }
+                        await new_channel.edit(overwrites=overwrite)
                 else:
                     new_channel = await guild.create_voice_channel(stat_value)
                     self.channel_ids[f"{guild.id}_{stat_name}"] = new_channel.id
-
-                # Set permissions to make the channel visible but not joinable for everyone except the bot
-                overwrite = {
-                    guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=False),
-                    guild.me: discord.PermissionOverwrite(view_channel=True, connect=True)
-                }
-                await new_channel.edit(overwrites=overwrite)
+                    # Set permissions to make the channel visible but not joinable for everyone except the bot
+                    overwrite = {
+                        guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=False),
+                        guild.me: discord.PermissionOverwrite(view_channel=True, connect=True)
+                    }
+                    await new_channel.edit(overwrites=overwrite)
 
         self.save_channel_ids()
 
