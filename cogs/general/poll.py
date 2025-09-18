@@ -5,10 +5,15 @@ from discord import app_commands
 class Poll(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print("[DEBUG] Poll cog loaded")  # Debug output on load
 
     @app_commands.command(name="poll", description="Create a poll")
     async def poll(self, interaction: discord.Interaction, question: str, option1: str, option2: str, option3: str = None, option4: str = None):
-        embed = discord.Embed(title="Poll", description=question, color=discord.Color.blue())
+        embed = discord.Embed(
+            title="📊 Poll",
+            description=f"**{question}**",
+            color=discord.Color.blue()
+        )
         
         options = [option1, option2, option3, option4]
         emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]

@@ -6,6 +6,7 @@ import aiohttp
 class Jokes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print("[DEBUG] Jokes cog loaded")  # Debug output on load
 
     @app_commands.command(name="joke", description="Get a random joke")
     async def joke(self, interaction: discord.Interaction):
@@ -19,11 +20,16 @@ class Jokes(commands.Cog):
                     embed = discord.Embed(
                         title="Here's a joke for you!",
                         description=f"{setup}\n\n{punchline}",
-                        color=discord.Color.orange()  # Light orange color
+                        color=discord.Color.orange()
                     )
                     await interaction.response.send_message(embed=embed)
                 else:
-                    await interaction.response.send_message("Couldn't fetch a joke. Please try again later.")
+                    embed = discord.Embed(
+                        title="Error",
+                        description="Couldn't fetch a joke. Please try again later.",
+                        color=discord.Color.red()
+                    )
+                    await interaction.response.send_message(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Jokes(bot))

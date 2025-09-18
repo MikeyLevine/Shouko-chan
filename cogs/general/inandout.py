@@ -1,49 +1,86 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import json
+import os
+
+CONFIG_FILE = "inandout_config.json"
 
 class InAndOut(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.welcome_message = "Welcome to the server, {member}!"
-        self.goodbye_message = "Goodbye, {member}. We will miss you!"
-        self.announcement_channel = None
+        self.guild_configs = self.load_configs()
+        print("[DEBUG] InAndOut cog loaded")  # debug on cog load
 
-    @app_commands.command(name="setup", description="Set the welcome and goodbye messages and announcement channel")
+    def load_configs(self):
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        return {}
+
+    def save_configs(self):
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(self.guild_configs, f, indent=4)
+
+    def get_guild_config(self, guild_id):
+        return self.guild_configs.get(str(guild_id), {})
+
+    def set_guild_config(self, guild_id, welcome, goodbye, channel_id):
+        self.guild_configs[str(guild_id)] = {
+            "welcome_message": welcome,
+            "goodbye_message": goodbye,
+            "announcement_channel_id": channel_id
+        }
+        self.save_configs()
+
+    @app_commands.command(name="setup", description="Set welcome/goodbye messages and announcement channel")
     async def setup(self, interaction: discord.Interaction, welcome_message: str, goodbye_message: str, channel: discord.TextChannel):
         try:
-            print("Setup command invoked")  # Debug print
-            self.welcome_message = welcome_message
-            self.goodbye_message = goodbye_message
-            self.announcement_channel = channel
-            print(f"New welcome message set: {welcome_message}")
-            print(f"New goodbye message set: {goodbye_message}")
-            print(f"Announcement channel set to: {channel.name}")
+            guild_id = interaction.guild.id
+            self.set_guild_config(guild_id, welcome_message, goodbye_message, channel.id)
+
+            print(f"[DEBUG] Setup invoked for guild {guild_id} by {interaction.user}")
             embed = discord.Embed(
                 title="Setup Complete",
-                description=f"Welcome message set to: {welcome_message}\nGoodbye message set to: {goodbye_message}\nAnnouncement channel set to: {channel.mention}",
-                color=discord.Color.red()  # Light red color
+                description=f"✅ Welcome message: {welcome_message}\n✅ Goodbye message: {goodbye_message}\n✅ Announcement channel: {channel.mention}",
+                color=discord.Color.red()
             )
             await interaction.response.send_message(embed=embed)
         except Exception as e:
-            print(f"Error in setup command: {e}")
-            await interaction.response.send_message(f"An error occurred: {e}", ephemeral=True)
+            print(f"[ERROR] Setup command error: {e}")
+            await interaction.response.send_message(f"❌ An error occurred: {e}", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
-        print(f"Member joined: {member.name}")  # Debug print
-        if self.announcement_channel:
-            await self.announcement_channel.send(self.welcome_message.format(member=member.mention))
+        guild_id = member.guild.id
+        config = self.get_guild_config(guild_id)
+        welcome_msg = config.get("welcome_message")
+        channel_id = config.get("announcement_channel_id")
+        print(f"[DEBUG] Member joined: {member.name} in guild {guild_id}")
+        if welcome_msg and channel_id:
+            channel = member.guild.get_channel(channel_id)
+            if channel:
+                await channel.send(welcome_msg.format(member=member.mention))
+            else:
+                print("[DEBUG] Announcement channel not found")
         else:
-            print("Announcement channel not set")
+            print("[DEBUG] Guild config missing or incomplete")
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
-        print(f"Member left: {member.name}")  # Debug print
-        if self.announcement_channel:
-            await self.announcement_channel.send(self.goodbye_message.format(member=member.mention))
+        guild_id = member.guild.id
+        config = self.get_guild_config(guild_id)
+        goodbye_msg = config.get("goodbye_message")
+        channel_id = config.get("announcement_channel_id")
+        print(f"[DEBUG] Member left: {member.name} in guild {guild_id}")
+        if goodbye_msg and channel_id:
+            channel = member.guild.get_channel(channel_id)
+            if channel:
+                await channel.send(goodbye_msg.format(member=member.mention))
+            else:
+                print("[DEBUG] Announcement channel not found")
         else:
-            print("Announcement channel not set")
+            print("[DEBUG] Guild config missing or incomplete")
 
 async def setup(bot):
     await bot.add_cog(InAndOut(bot))
