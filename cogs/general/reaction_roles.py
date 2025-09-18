@@ -11,6 +11,7 @@ class ReactionRoles(commands.Cog):
         self.role_message_id = None
         self.reaction_roles = {}
         self.load_data()
+        print("[DEBUG] ReactionRoles cog loaded")  # Debug output
 
     def load_data(self):
         if os.path.exists(self.data_file):
@@ -18,6 +19,7 @@ class ReactionRoles(commands.Cog):
                 data = json.load(f)
                 self.role_message_id = data.get('role_message_id')
                 self.reaction_roles = data.get('reaction_roles', {})
+            print(f"[DEBUG] Loaded reaction roles data: {self.reaction_roles}")  # Debug
 
     def save_data(self):
         data = {
@@ -26,10 +28,12 @@ class ReactionRoles(commands.Cog):
         }
         with open(self.data_file, 'w') as f:
             json.dump(data, f)
+        print(f"[DEBUG] Saved reaction roles data: {self.reaction_roles}")  # Debug
 
     @app_commands.command(name="setupreactionroles", description="Set up or add to reaction roles")
     @app_commands.checks.has_permissions(administrator=True)
     async def setupreactionroles(self, interaction: discord.Interaction, message_id: str, roles: str, title: str = None, description: str = None, add: bool = False):
+        print(f"[DEBUG] setupreactionroles invoked by {interaction.user}")  # Debug
         try:
             message_id = int(message_id)
             message = await interaction.channel.fetch_message(message_id)
@@ -44,36 +48,32 @@ class ReactionRoles(commands.Cog):
                 try:
                     emoji, role_id = role.split(':')
                     role_id = int(role_id.strip())
-                    role = interaction.guild.get_role(role_id)
-                    if role:
+                    guild_role = interaction.guild.get_role(role_id)
+                    if guild_role:
                         self.reaction_roles[emoji.strip()] = role_id
                     else:
                         await interaction.response.send_message(f"Role with ID {role_id} not found.", ephemeral=True)
                         return
                 except ValueError:
-                    await interaction.response.send_message("Invalid format. Please use the format `emoji:role_id`.", ephemeral=True)
+                    await interaction.response.send_message("Invalid format. Use `emoji:role_id`.", ephemeral=True)
                     return
 
             self.role_message_id = message_id
             self.save_data()
 
-            if not add:
-                embed = discord.Embed(
-                    title=title,
-                    description=description,
-                    color=discord.Color.blue()
-                )
-            else:
-                embed = message.embeds[0]
-                if title:
-                    embed.title = title
-                if description:
-                    embed.description = description
+            embed = message.embeds[0] if add and message.embeds else discord.Embed(
+                title=title or "",
+                description=description or "",
+                color=discord.Color.blue()
+            )
+
+            if title: embed.title = title
+            if description: embed.description = description
 
             for emoji, role_id in self.reaction_roles.items():
-                role = interaction.guild.get_role(role_id)
-                if role and not any(field.name == emoji for field in embed.fields):
-                    embed.add_field(name=emoji, value=role.name, inline=False)
+                guild_role = interaction.guild.get_role(role_id)
+                if guild_role and not any(field.name == emoji for field in embed.fields):
+                    embed.add_field(name=emoji, value=guild_role.name, inline=False)
 
             try:
                 await message.edit(embed=embed)
@@ -83,13 +83,14 @@ class ReactionRoles(commands.Cog):
                 self.save_data()
                 message = new_message
 
-            # Add reactions to the message
             for emoji in self.reaction_roles.keys():
                 await message.add_reaction(emoji)
 
             await interaction.response.send_message("Reaction roles set up successfully.", ephemeral=True)
+            print(f"[DEBUG] Reaction roles setup complete for message {self.role_message_id}")  # Debug
         except Exception as e:
             await interaction.response.send_message(f"An error occurred: {e}", ephemeral=True)
+            print(f"[ERROR] setupreactionroles error: {e}")
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
@@ -113,6 +114,7 @@ class ReactionRoles(commands.Cog):
             return
 
         await member.add_roles(role)
+        print(f"[DEBUG] Added role {role.name} to {member}")  # Debug
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
@@ -136,6 +138,7 @@ class ReactionRoles(commands.Cog):
             return
 
         await member.remove_roles(role)
+        print(f"[DEBUG] Removed role {role.name} from {member}")  # Debug
 
 async def setup(bot):
     await bot.add_cog(ReactionRoles(bot))

@@ -5,9 +5,11 @@ from discord import app_commands
 class Invite(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print("[DEBUG] Invite cog loaded")  # Debug output on cog load
 
     @app_commands.command(name="invite", description="Get the Discord invite link")
     async def invite(self, interaction: discord.Interaction):
+        print(f"[DEBUG] Invite command invoked by {interaction.user} in guild {interaction.guild.id}")
         embed = discord.Embed(
             title="Join Our Discord Server",
             description="Click the button below to join our Discord server!",

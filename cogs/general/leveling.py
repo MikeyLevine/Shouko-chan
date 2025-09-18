@@ -11,6 +11,7 @@ class Leveling(commands.Cog):
         self.user_data = self.load_user_data()
         self.server_settings = self.load_server_settings()
         self.last_exp_time = {}
+        print("[DEBUG] Leveling cog loaded")  # Debug output on cog load
 
     def load_user_data(self):
         if os.path.exists("user_data.json"):
@@ -20,7 +21,7 @@ class Leveling(commands.Cog):
 
     def save_user_data(self):
         with open("user_data.json", "w") as f:
-            json.dump(self.user_data, f)
+            json.dump(self.user_data, f, indent=4)
 
     def load_server_settings(self):
         if os.path.exists("server_settings.json"):
@@ -30,7 +31,7 @@ class Leveling(commands.Cog):
 
     def save_server_settings(self):
         with open("server_settings.json", "w") as f:
-            json.dump(self.server_settings, f)
+            json.dump(self.server_settings, f, indent=4)
 
     def calculate_level(self, exp):
         level = 1
@@ -50,10 +51,8 @@ class Leveling(commands.Cog):
         guild_id = str(message.guild.id)
         current_time = time.time()
 
-        # Get the cooldown time for the server, default to 8 minutes (480 seconds)
         cooldown_time = self.server_settings.get(guild_id, {}).get("cooldown_time", 8 * 60)
 
-        # Check if the user is on cooldown
         if user_id in self.last_exp_time:
             last_time = self.last_exp_time[user_id]
             if current_time - last_time < cooldown_time:
@@ -70,6 +69,7 @@ class Leveling(commands.Cog):
 
         if new_level > self.user_data[user_id]["level"]:
             self.user_data[user_id]["level"] = new_level
+            print(f"[DEBUG] {message.author} leveled up to {new_level}")  # Debug output
             await self.send_level_up_message(message.channel, message.author, new_level)
 
         self.save_user_data()
@@ -86,6 +86,7 @@ class Leveling(commands.Cog):
     @app_commands.command(name="check_level", description="Check your current level and experience points")
     async def check_level(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
+        print(f"[DEBUG] check_level command invoked by {interaction.user}")  # Debug
         if user_id in self.user_data:
             exp = self.user_data[user_id]["exp"]
             level = self.user_data[user_id]["level"]
@@ -111,6 +112,7 @@ class Leveling(commands.Cog):
         self.user_data[user_id]["enabled"] = not self.user_data[user_id].get("enabled", True)
         status = "activated" if self.user_data[user_id]["enabled"] else "deactivated"
         self.save_user_data()
+        print(f"[DEBUG] {interaction.user} toggled leveling: {status}")  # Debug
 
         await interaction.response.send_message(f"Leveling system has been {status} for you.", ephemeral=True)
 
@@ -121,9 +123,9 @@ class Leveling(commands.Cog):
         if guild_id not in self.server_settings:
             self.server_settings[guild_id] = {}
 
-        # Convert minutes to seconds
         self.server_settings[guild_id]["cooldown_time"] = cooldown_time * 60
         self.save_server_settings()
+        print(f"[DEBUG] Cooldown set to {cooldown_time} minutes for guild {interaction.guild}")  # Debug
 
         await interaction.response.send_message(f"Cooldown time has been set to {cooldown_time} minutes.", ephemeral=True)
 
