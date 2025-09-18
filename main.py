@@ -34,9 +34,8 @@ cogs = [
     'cogs.general.weather',
     'cogs.general.crypto',
     'cogs.general.inandout',
-    'cogs.general.help',  # Ensure this line is present to load the help cog
+    'cogs.general.help',
     'cogs.general.reaction_roles',
-    # 'cogs.general.richpresence',  # Comment out this line to disable richpresence
     'cogs.general.hmtai',
     'cogs.general.shutdown',
     'cogs.general.welcome',
@@ -44,10 +43,18 @@ cogs = [
     'cogs.general.membercount',
     'cogs.general.warnings',
     'cogs.general.afk',
-    'cogs.general.invite',  # Add this line to load the invite cog
-    'cogs.general.leveling',  # Add this line to load the leveling cog
-    'cogs.general.owner_commands',  # Add this line to load the owner commands cog
-    'cogs.general.setupdm'  # Add this line to load the setupdm cog
+    'cogs.general.invite',
+    'cogs.general.leveling',
+    'cogs.general.owner_commands',
+    'cogs.general.setupdm',
+    'cogs.general.reddit',
+    'cogs.moderation.server_command',
+    'cogs.moderation.server_notify',
+    'cogs.moderation.giveaway',
+    'cogs.moderation.ticket',
+    'cogs.moderation.automod',
+    'cogs.moderation.onjoin',
+    'cogs.general.richpresence'
 ]
 
 @bot.event
@@ -55,31 +62,21 @@ async def on_ready():
     if not hasattr(bot, 'ready'):
         bot.ready = True
         print(f'Logged on as {bot.user}!')
-        loaded_cogs = []
-        failed_cogs = []
 
+        # Load all cogs; each cog will print its own debug message
         for cog in cogs:
             try:
                 await bot.load_extension(cog)
-                loaded_cogs.append(cog)
             except Exception as e:
-                failed_cogs.append((cog, str(e)))
-                print(f"Failed to load cog {cog}: {e}")
+                print(f"[ERROR] Failed to load cog {cog}: {e}")
 
-        print("\nSummary of Cog Loading:")
-        print(f"Successfully loaded cogs: {', '.join(loaded_cogs)}")
-        if failed_cogs:
-            print("Failed to load the following cogs:")
-            for cog, error in failed_cogs:
-                print(f"{cog}: {error}")
-
+        # Sync slash commands
         try:
-            synced = await bot.tree.sync()
-            print(f'Synced {len(synced)} slash commands')
+            await bot.tree.sync()
+            print(f"[DEBUG] Slash commands synced.")
         except Exception as e:
-            print(f'Failed to sync slash commands: {e}')
-        
-        print("All commands loaded successfully!")
+            print(f"[ERROR] Failed to sync slash commands: {e}")
+
 
 @bot.event
 async def on_member_join(member):
@@ -92,12 +89,14 @@ async def on_member_join(member):
         if channel:
             await channel.send(f"{member.mention} has joined the server!")
 
+
 @bot.event
 async def on_member_remove(member):
     if welcome_channel_id:
         channel = bot.get_channel(welcome_channel_id)
         if channel:
             await channel.send(goodbye_message.format(member=member.mention))
+
 
 async def main():
     try:
@@ -114,5 +113,6 @@ async def main():
         loop = asyncio.get_event_loop()
         loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()
+
 
 asyncio.run(main())

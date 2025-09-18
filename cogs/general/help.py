@@ -5,6 +5,7 @@ from discord import app_commands
 class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print("[DEBUG] Help cog loaded")  # Debug output when cog loads
 
     @app_commands.command(name="help", description="Show help for all commands")
     async def help(self, interaction: discord.Interaction):
@@ -28,13 +29,17 @@ class Help(commands.Cog):
                     )
 
                 await interaction.user.send(embed=embed)
-                print(f"Help command executed successfully for page {page_number}.")
+                print(f"[DEBUG] Help command executed for page {page_number}")
 
-            await interaction.response.send_message("I've sent you a DM with the list of commands.", ephemeral=True)
+            await interaction.response.send_message(
+                "I've sent you a DM with the list of commands.", ephemeral=True
+            )
         except discord.Forbidden:
-            await interaction.response.send_message("I couldn't send you a DM. Please check your DM settings.", ephemeral=True)
+            await interaction.response.send_message(
+                "I couldn't send you a DM. Please check your DM settings.", ephemeral=True
+            )
         except Exception as e:
-            print(f"Error executing help command: {e}")
+            print(f"[ERROR] Executing help command: {e}")
             await interaction.response.send_message(f"An error occurred: {e}", ephemeral=True)
 
 async def setup(bot):

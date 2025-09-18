@@ -1,43 +1,49 @@
-"""
 import discord
 from discord.ext import commands, tasks
+import itertools
+import random
 
-class Presence(commands.Cog):
+class RichPresence(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.set_presence.start()
+        self.statuses = itertools.cycle([
+            ("playing", "🤖 Use /help for commands"),
+            ("playing", "🎉 Invite Shouko-chan to your server!"),
+            ("watching", "🌐 {guild_count} servers"),
+            ("playing", "🔧 Moderation, fun, and more!"),
+            ("watching", "users leveling up 📈"),
+            ("playing", "NSFW fun with /reddit 🔞"),
+            ("playing", "☁️ Check the weather with /weather"),
+            ("watching", "crypto charts 💹 /crypto"),
+            ("playing", "Level up in the server!"),
+            ("playing", "⚔️ Manage with /kick, /ban, /mute"),
+            ("watching", "reaction roles setup"),
+            ("playing", "Join us: discord.gg/4tp457CRD8"),
+        ])
+        self.update_status.start()
 
     def cog_unload(self):
-        self.set_presence.cancel()
+        self.update_status.cancel()
 
-    @tasks.loop(minutes=5)
-    async def set_presence(self):
-        await self.bot.change_presence(activity=discord.Game(name="Early Development | Join: https://discord.gg/4tp457CRD8"))
+    @tasks.loop(seconds=30)
+    async def update_status(self):
+        await self.bot.wait_until_ready()
+        kind, text = next(self.statuses)
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        print(f'Logged on as {self.bot.user}!')
-    
-    @commands.command(name="invite", description="Get the bot invite link")
-    async def invite(self, ctx):
-        embed = discord.Embed(
-            title="In Development",
-            description="Our bot is currently in development! Stay tuned for updates.",
-            color=discord.Color.blue()
-        )
-        embed.add_field(
-            name="Join Our Community",
-            value="We'd love to have you! Join our server and provide feedback or help with development.",
-            inline=False
-        )
-        
-        # Button with the Discord invite link
-        button = discord.ui.Button(label="Join Now", url="https://discord.gg/4tp457CRD8")
-        view = discord.ui.View()
-        view.add_item(button)
+        text = text.format(guild_count=len(self.bot.guilds))
 
-        await ctx.send(embed=embed, view=view)
+        if kind == "playing":
+            activity = discord.Game(name=text)
+        elif kind == "watching":
+            activity = discord.Activity(type=discord.ActivityType.watching, name=text)
+        else:
+            activity = discord.Game(name=text)  # fallback
+
+        await self.bot.change_presence(activity=activity, status=discord.Status.online)
+
+    @update_status.before_loop
+    async def before_update_status(self):
+        await self.bot.wait_until_ready()
 
 async def setup(bot):
-    await bot.add_cog(Presence(bot))
-"""
+    await bot.add_cog(RichPresence(bot))
