@@ -4,7 +4,7 @@ from discord import app_commands
 import json
 import os
 
-CHANNEL_FILE = "channel_ids.json"
+CHANNEL_FILE = "data/channel_ids.json"
 
 class MemberCount(commands.Cog):
     def __init__(self, bot):

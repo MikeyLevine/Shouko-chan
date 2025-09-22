@@ -4,7 +4,7 @@ from discord import app_commands, ui
 import json
 import os
 
-CONFIG_FILE = "onjoin.json"
+CONFIG_FILE = "data/onjoin.json"
 OWNER_ID = 1255466299258306611  # Replace with your Discord ID
 
 DEFAULT_EMBED = {

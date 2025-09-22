@@ -7,7 +7,7 @@ import os
 class ReactionRoles(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.data_file = 'reaction_roles.json'
+        self.data_file = 'data/reaction_roles.json'
         self.role_message_id = None
         self.reaction_roles = {}
         self.load_data()

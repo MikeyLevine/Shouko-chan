@@ -4,9 +4,9 @@ from discord import app_commands, ui
 import json
 import os
 
-TICKETS_FILE = "tickets.json"
+TICKETS_FILE = "data/tickets.json"
 OWNER_ROLE_NAMES = ["Admin", "Moderator"]  # Staff roles that can see tickets
-TRANSCRIPTS_FOLDER = "ticket_transcripts"
+TRANSCRIPTS_FOLDER = "data/ticket_transcripts"
 
 if not os.path.exists(TRANSCRIPTS_FOLDER):
     os.makedirs(TRANSCRIPTS_FOLDER)

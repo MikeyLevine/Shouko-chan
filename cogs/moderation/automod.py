@@ -8,8 +8,8 @@ import time
 from collections import defaultdict
 import shutil
 
-CONFIG_FILE = "automod_config.json"
-BACKUP_FILE = "automod_config_backup.json"
+CONFIG_FILE = "data/automod_config.json"
+BACKUP_FILE = "data/automod_config_backup.json"
 
 class Automod(commands.Cog):
     def __init__(self, bot):

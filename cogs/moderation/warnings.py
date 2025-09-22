@@ -11,15 +11,15 @@ class Warnings(commands.Cog):
         print("[DEBUG] Warnings cog loaded")  # Debug output
 
     def load_warnings(self):
-        if os.path.exists("warnings.json"):
-            with open("warnings.json", "r") as f:
+        if os.path.exists("data/warnings.json"):
+            with open("data/warnings.json", "r") as f:
                 data = json.load(f)
             print(f"[DEBUG] Loaded warnings data: {data}")  # Debug
             return data
         return {}
 
     def save_warnings(self):
-        with open("warnings.json", "w") as f:
+        with open("data/warnings.json", "w") as f:
             json.dump(self.warnings, f)
         print(f"[DEBUG] Saved warnings data: {self.warnings}")  # Debug
 
