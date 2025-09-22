@@ -14,23 +14,23 @@ class Leveling(commands.Cog):
         print("[DEBUG] Leveling cog loaded")  # Debug output on cog load
 
     def load_user_data(self):
-        if os.path.exists("user_data.json"):
-            with open("user_data.json", "r") as f:
+        if os.path.exists("data/user_data.json"):
+            with open("data/user_data.json", "r") as f:
                 return json.load(f)
         return {}
 
     def save_user_data(self):
-        with open("user_data.json", "w") as f:
+        with open("data/user_data.json", "w") as f:
             json.dump(self.user_data, f, indent=4)
 
     def load_server_settings(self):
-        if os.path.exists("server_settings.json"):
-            with open("server_settings.json", "r") as f:
+        if os.path.exists("data/server_settings.json"):
+            with open("data/server_settings.json", "r") as f:
                 return json.load(f)
         return {}
 
     def save_server_settings(self):
-        with open("server_settings.json", "w") as f:
+        with open("data/server_settings.json", "w") as f:
             json.dump(self.server_settings, f, indent=4)
 
     def calculate_level(self, exp):

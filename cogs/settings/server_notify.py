@@ -3,7 +3,7 @@ from discord.ext import commands
 import json
 import os
 
-SERVER_FILE = "server_list.json"
+SERVER_FILE = "data/server_list.json"
 OWNER_ID = 1255466299258306611  # Your Discord ID
 
 class ServerNotify(commands.Cog):

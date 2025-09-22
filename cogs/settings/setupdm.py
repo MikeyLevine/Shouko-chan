@@ -15,14 +15,14 @@ class SetupDM(commands.Cog):
         return interaction.user.id == OWNER_ID
 
     def load_dm_channel_id(self):
-        if os.path.exists("dm_channel.json"):
-            with open("dm_channel.json", "r") as f:
+        if os.path.exists("data/dm_channel.json"):
+            with open("data/dm_channel.json", "r") as f:
                 data = json.load(f)
                 return data.get("dm_channel_id")
         return None
 
     def save_dm_channel_id(self):
-        with open("dm_channel.json", "w") as f:
+        with open("data/dm_channel.json", "w") as f:
             json.dump({"dm_channel_id": self.dm_channel_id}, f)
 
     @app_commands.command(name="setupdm", description="Set up a channel to receive DMs")

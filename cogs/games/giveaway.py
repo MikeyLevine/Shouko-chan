@@ -6,7 +6,7 @@ import json
 import os
 import time
 
-GIVEAWAYS_FILE = "giveaways.json"
+GIVEAWAYS_FILE = "data/giveaways.json"
 OWNER_ID = 1255466299258306611  # Your Discord ID
 
 class Giveaway(commands.Cog):

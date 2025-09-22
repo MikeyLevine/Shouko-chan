@@ -4,7 +4,7 @@ from discord import app_commands
 import json
 import os
 
-CONFIG_FILE = "inandout_config.json"
+CONFIG_FILE = "data/inandout_config.json"
 
 class InAndOut(commands.Cog):
     def __init__(self, bot):
