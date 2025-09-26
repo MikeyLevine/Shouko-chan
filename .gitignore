@@ -5,12 +5,10 @@ __pycache__/
 *.pyd
 
 # Virtual environments
-bot_env/
-venv/
+.venv/
 
 # Environment variables
-.env
-
+.venv
 # Config files with sensitive info
 automod_config.json
 onjoin.json
