@@ -1,0 +1,12 @@
+{
+    "1321119237976100945": {
+        "spam_threshold": 5,
+        "caps_limit": 70,
+        "mention_limit": 3,
+        "link_filter": true,
+        "promotion_filter": true,
+        "blacklisted_words": [],
+        "auto_mute_threshold": 3,
+        "auto_kick_threshold": 5
+    }
+}

@@ -1,0 +1,8 @@
+{
+  "prefix": "!",
+  "welcome_message": "Welcome to the server, {member}!",
+  "goodbye_message": "Goodbye, {member}. We will miss you!",
+  "log_channel_id": null,
+  "welcome_channel_id": null,
+  "announcement_channel_id": null
+}

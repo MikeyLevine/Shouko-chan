@@ -55,6 +55,22 @@ class Reddit(commands.Cog):
             fetch_limit = 5
             async for submission in getattr(subreddit_obj, sort.value)(limit=fetch_limit):
                 if submission.over_18:
+                    embed = discord.Embed(
+                        title=submission.title,
+                        url=submission.url,
+                        color=discord.Color.red()
+                    )
+                    # If the post is an image
+                    if submission.url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                        embed.set_image(url=submission.url)
+                    # If the post is a video (Reddit hosted)
+                    elif hasattr(submission, "media") and submission.media and "reddit_video" in submission.media:
+                        video_url = submission.media["reddit_video"]["fallback_url"]
+                        embed.add_field(name="Video", value=f"[Watch Video]({video_url})", inline=False)
+                    else:
+                        embed.add_field(name="Link", value=submission.url, inline=False)
+                    embed.set_footer(text=f"r/{subreddit} | 👍 {submission.score} | 💬 {submission.num_comments}")
+                    await interaction.channel.send(embed=embed)
                     posts.append(f"Title: {submission.title}\nURL: {submission.url}")
 
             if posts:

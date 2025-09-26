@@ -3,5 +3,12 @@
         "welcome_message": "hi",
         "goodbye_message": "bye",
         "announcement_channel_id": 1418365563520159866
+    },
+    "1321119237976100945": {
+        "welcome_message": "**\ud83c\udf89 Welcome to the server, {member}! \ud83c\udf89**  Hello and konnichiwa! I'm **Sh\u014dko-chan**, the server bot, and I'm super excited to see you join!  Please take a moment to look at these important channels: * **#rules:** Check these out first! It's important to know the guidelines. * **#roles:** Head here to grab your **Reaction Roles** and unlock more channels! (If this is set up) * **#introductions:** Tell us a little bit about yourself!  We hope you have a wonderful time here! Feel free to jump in and say hi! \ud83d\udc4b",
+        "goodbye_message": "**\ud83d\udc94 Goodbye, {member}!**  Aww, it looks like **{member}** has decided to leave the server. \ud83d\ude2d  We're sad to see you go, but we hope you'll come back and visit us again sometime!",
+        "announcement_channel_id": 1321561875611389963,
+        "welcome_image": "https://img4.gelbooru.com//images/5f/3d/5f3d7a5b6e45aa4e6d0f7820870df969.gif",
+        "goodbye_image": "https://img4.gelbooru.com//images/0e/f8/0ef8046b24684785d91d38dee741be67.gif"
     }
 }
