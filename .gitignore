@@ -1,45 +1,45 @@
 # Python cache
-#__pycache__/
-#*.pyc
-#*.pyo
-#*.pyd
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
 # Virtual environments
-#bot_env/
-#venv/
+bot_env/
+venv/
 
 # Environment variables
-#.env
+.env
 
 # Config files with sensitive info
-#automod_config.json
-#onjoin.json
-#welcome_config.json
-#reaction_roles.json
-#server_list.json
-#server_settings.json
-#tickets.json
-#dm_channel.json
-#channel_ids.json
-#user_data.json
-#giveaways.json
-#warnings.json
-#config.json
+automod_config.json
+onjoin.json
+welcome_config.json
+reaction_roles.json
+server_list.json
+server_settings.json
+tickets.json
+dm_channel.json
+channel_ids.json
+user_data.json
+giveaways.json
+warnings.json
+config.json
 
 # Logs
-#*.log
+*.log
 
 # OS files
-#.DS_Store
-#Thumbs.db
+.DS_Store
+Thumbs.db
 
 # IDE files
-#.vscode/
-#.idea/
+.vscode/
+.idea/
 
 # Temporary files
-#*.tmp
-#*.swp
+*.tmp
+*.swp
 
 # Ticket transcripts (if sensitive)
-#ticket_transcripts/
+ticket_transcripts/
