@@ -62,7 +62,7 @@ class SetupDM(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author == self.bot.user:
+        if message.author.bot:
             return
 
         if isinstance(message.channel, discord.DMChannel):
@@ -71,10 +71,14 @@ class SetupDM(commands.Cog):
                 if channel:
                     embed = discord.Embed(
                         title="New DM Received",
-                        description=f"From: {message.author} ({message.author.id})\n\n{message.content}",
+                        description=f"From: {message.author} ({message.author.id})\n\n{message.content or '[No Content]'}",
                         color=discord.Color.green()
                     )
+                    if message.attachments:
+                        embed.add_field(name="Attachments", value="\n".join(a.url for a in message.attachments))
                     await channel.send(embed=embed)
+                else:
+                    print(f"[ERROR] DM channel ID {self.dm_channel_id} not found.")
 
 async def setup(bot):
     await bot.add_cog(SetupDM(bot))

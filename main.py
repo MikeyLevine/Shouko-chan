@@ -23,7 +23,6 @@ owner_id = int(os.getenv("OWNER_ID", 0))  # Set your Discord ID in .env
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
-
 bot = commands.Bot(command_prefix=prefix, intents=intents)
 
 cogs = [
