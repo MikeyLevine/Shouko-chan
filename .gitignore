@@ -8,7 +8,7 @@ __pycache__/
 .venv/
 
 # Environment variables
-.venv
+.env
 # Config files with sensitive info
 automod_config.json
 onjoin.json
