@@ -125,7 +125,7 @@ class Ticket(commands.Cog):
         ticket_info = tickets[str(channel.id)]
 
         # Create transcript
-        messages = await channel.history(limit=None, oldest_first=True).flatten()
+        messages = [msg async for msg in channel.history(limit=None, oldest_first=True)]
         transcript_path = os.path.join(
             TRANSCRIPTS_FOLDER, f"ticket-{ticket_info['ticket_number']:03d}.txt"
         )
