@@ -16,6 +16,18 @@ CATEGORIES = [
     "yaoi", "yuri"
 ]
 
+# Rule34 tags a category to a noisier/broader alias than the one actually
+# wanted - "neko" pulls in a lot of unrelated content mistagged by the
+# autocomplete tagger, "catgirl" is the tightly-scoped equivalent.
+TAG_OVERRIDES = {
+    "neko": "catgirl",
+}
+
+# AI-generated posts get auto-tagged (rather than tagged by a human curator)
+# and are noticeably less accurate, which is the main source of results that
+# don't match the requested category - excluding them tightens relevance.
+EXCLUDED_TAGS = "-ai_generated -ai_art -ai-created"
+
 class HMTai(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -37,12 +49,14 @@ class HMTai(commands.Cog):
             )
             return
 
+        tag = TAG_OVERRIDES.get(category, category)
+
         params = {
             "page": "dapi",
             "s": "post",
             "q": "index",
             "json": "1",
-            "tags": category,
+            "tags": f"{tag} {EXCLUDED_TAGS}",
             "limit": "100",
             # Randomize which page of results we pull from so repeated calls
             # don't always return the same first 100 posts for a tag.
