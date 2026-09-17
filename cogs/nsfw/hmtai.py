@@ -2,10 +2,13 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import random
+import os
 import aiohttp
-from bs4 import BeautifulSoup
 
-BASE_URL = "http://24.135.112.94:8080"
+RULE34_API_KEY = os.getenv("RULE34_API_KEY")
+RULE34_USER_ID = os.getenv("RULE34_USER_ID")
+BASE_URL = "https://api.rule34.xxx/index.php"
+
 CATEGORIES = [
     "anal", "ass", "bdsm", "blowjob", "boobs", "cum",
     "gangbang", "handjob", "masturbation", "neko", "paizuri",
@@ -18,7 +21,7 @@ class HMTai(commands.Cog):
         self.bot = bot
         print("[DEBUG] HMTai cog loaded")  # Debug output
 
-    @app_commands.command(name="hentai", description="Get a hentai GIF from local server")
+    @app_commands.command(name="hentai", description="Get a hentai image from Rule34")
     async def hentai(self, interaction: discord.Interaction, category: str):
         category = category.lower()
         if category not in CATEGORIES:
@@ -28,9 +31,29 @@ class HMTai(commands.Cog):
             )
             return
 
+        if not RULE34_API_KEY or not RULE34_USER_ID:
+            await interaction.response.send_message(
+                "⚠️ Rule34 API credentials are not set.", ephemeral=True
+            )
+            return
+
+        params = {
+            "page": "dapi",
+            "s": "post",
+            "q": "index",
+            "json": "1",
+            "tags": category,
+            "limit": "100",
+            # Randomize which page of results we pull from so repeated calls
+            # don't always return the same first 100 posts for a tag.
+            "pid": str(random.randint(0, 20)),
+            "api_key": RULE34_API_KEY,
+            "user_id": RULE34_USER_ID,
+        }
+
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{BASE_URL}/{category}/") as resp:
+                async with session.get(BASE_URL, params=params) as resp:
                     if resp.status != 200:
                         await interaction.response.send_message(
                             f"⚠️ Cannot reach image server for category '{category}'.",
@@ -38,22 +61,38 @@ class HMTai(commands.Cog):
                         )
                         return
 
-                    html = await resp.text()
-                    soup = BeautifulSoup(html, "html.parser")
-
-                    links = [
-                        a.get("href") for a in soup.find_all("a")
-                        if a.get("href") and a.get("href").lower().endswith((".jpg", ".jpeg", ".png", ".gif"))
+                    posts = await resp.json(content_type=None)
+                    posts = [
+                        p for p in (posts or [])
+                        if p.get("file_url", "").lower().endswith((".jpg", ".jpeg", ".png", ".gif"))
                     ]
 
-                    if not links:
+                    if not posts:
+                        # Random page came up empty (tag has fewer posts than
+                        # the pid range covers, or this page was all videos) -
+                        # fall back to the first page.
+                        params["pid"] = "0"
+                        async with session.get(BASE_URL, params=params) as resp2:
+                            posts = await resp2.json(content_type=None)
+                            posts = [
+                                p for p in (posts or [])
+                                if p.get("file_url", "").lower().endswith((".jpg", ".jpeg", ".png", ".gif"))
+                            ]
+
+                    if not posts:
                         await interaction.response.send_message(
                             f"⚠️ No files found in category '{category}'!", ephemeral=True
                         )
                         return
 
-                    file_name = random.choice(links).lstrip("/").replace(" ", "%20")
-                    file_url = f"{BASE_URL}/{category}/{file_name}"
+                    post = random.choice(posts)
+                    file_url = post.get("file_url")
+
+                    if not file_url:
+                        await interaction.response.send_message(
+                            f"⚠️ No files found in category '{category}'!", ephemeral=True
+                        )
+                        return
 
         except aiohttp.ClientError as e:
             await interaction.response.send_message(f"❌ HTTP error: {e}", ephemeral=True)
