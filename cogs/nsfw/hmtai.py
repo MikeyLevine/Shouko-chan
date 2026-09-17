@@ -28,6 +28,11 @@ TAG_OVERRIDES = {
 # don't match the requested category - excluding them tightens relevance.
 EXCLUDED_TAGS = "-ai_generated -ai_art -ai-created"
 
+# Higher-scored posts get more community eyes on them, so bad/mismatched
+# tags are more likely to have been caught and fixed. 200 was checked
+# against all 19 categories and still returns a full pool for each.
+MIN_SCORE = "score:>=200"
+
 class HMTai(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -56,7 +61,7 @@ class HMTai(commands.Cog):
             "s": "post",
             "q": "index",
             "json": "1",
-            "tags": f"{tag} {EXCLUDED_TAGS}",
+            "tags": f"{tag} {EXCLUDED_TAGS} {MIN_SCORE}",
             "limit": "100",
             # Randomize which page of results we pull from so repeated calls
             # don't always return the same first 100 posts for a tag.
