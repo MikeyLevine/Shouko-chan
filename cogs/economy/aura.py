@@ -144,6 +144,36 @@ class Aura(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="pay", description="Send some of your Aura to another member")
+    @app_commands.describe(member="Who to pay", amount="How much Aura to send")
+    async def pay(self, interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[int, 1, None]):
+        if not interaction.guild:
+            await interaction.response.send_message("This command only works in a server.", ephemeral=True)
+            return
+
+        if member.id == interaction.user.id:
+            await interaction.response.send_message("You can't pay yourself.", ephemeral=True)
+            return
+
+        if member.bot:
+            await interaction.response.send_message("You can't pay a bot.", ephemeral=True)
+            return
+
+        if not self.remove_balance(interaction.guild.id, interaction.user.id, amount):
+            await interaction.response.send_message("You don't have enough Aura for that.", ephemeral=True)
+            return
+
+        self.add_balance(interaction.guild.id, member.id, amount)
+        new_balance = self.get_balance(interaction.guild.id, interaction.user.id)
+
+        embed = discord.Embed(
+            title="💸 Payment Sent",
+            description=f"{interaction.user.mention} paid {member.mention} **{amount}** Aura.",
+            color=discord.Color.green()
+        )
+        embed.set_footer(text=f"Your balance: {new_balance} Aura")
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="richest", description="Show the Aura leaderboard")
     @app_commands.describe(scope="This server only, or aggregated across every server the bot is in")
     @app_commands.choices(scope=[
