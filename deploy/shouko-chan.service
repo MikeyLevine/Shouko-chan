@@ -1,0 +1,24 @@
+[Unit]
+Description=Shouko-chan Discord bot
+After=network.target
+
+[Service]
+Type=simple
+User=jovan
+# A separate checkout from the dev directory (/home/jovan/Shouko-chan) on
+# purpose - production must never run out of the same working tree an
+# active dev session is editing in.
+#
+# Important, specific to a Discord bot (unlike a web app on its own port):
+# this service and the dev checkout's bot process both log in with the SAME
+# bot token. Discord will happily let two gateway sessions connect at once,
+# and both will race to answer the same slash command - don't run main.py
+# manually from ~/Shouko-chan while this service is up.
+WorkingDirectory=/srv/shouko-chan/app
+EnvironmentFile=/srv/shouko-chan/app/.env
+ExecStart=/srv/shouko-chan/app/.venv/bin/python -u main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

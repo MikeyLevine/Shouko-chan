@@ -1,0 +1,8 @@
+[Unit]
+Description=Shouko-chan backup (bot data storage)
+
+[Service]
+Type=oneshot
+User=jovan
+WorkingDirectory=/srv/shouko-chan/app
+ExecStart=/srv/shouko-chan/app/deploy/backup.sh
