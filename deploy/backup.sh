@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Daily backup: a tarball of the persistent data storage directory (Aura,
-# leveling, shop inventory, profiles, per-server config - everything under
-# data/, which is a symlink to /srv/shouko-chan/storage outside this
-# checkout), timestamped, kept for 14 days locally. This only protects
+# Daily backup: a consistent SQLite snapshot (via `.backup`, not a raw file
+# copy - the live db can be mid-write when this runs, and copying its bytes
+# directly risks capturing it torn between the main file and its WAL) plus
+# a tarball of everything else under the persistent data storage directory
+# (old pre-migration JSON files kept as a safety net, ticket transcripts,
+# etc.), both timestamped and kept for 14 days locally. This only protects
 # against local disk failure if BACKUP_REMOTE_DEST also copies these off
 # this machine - set it to an rclone/rsync destination or backups are only
 # as safe as this one disk.
@@ -15,17 +17,25 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 
 mkdir -p "$BACKUP_DIR"
 
-echo "==> Archiving data storage"
-tar -czf "$BACKUP_DIR/data-$STAMP.tar.gz" -C "$(dirname "$STORAGE_DIR")" "$(basename "$STORAGE_DIR")"
+echo "==> Snapshotting SQLite database"
+sqlite3 "$STORAGE_DIR/shouko.db" ".backup '$BACKUP_DIR/shouko-$STAMP.db'"
+gzip "$BACKUP_DIR/shouko-$STAMP.db"
+
+echo "==> Archiving remaining data storage"
+tar -czf "$BACKUP_DIR/data-$STAMP.tar.gz" \
+  --exclude="shouko.db" --exclude="shouko.db-wal" --exclude="shouko.db-shm" \
+  -C "$(dirname "$STORAGE_DIR")" "$(basename "$STORAGE_DIR")"
 
 if [ -n "${BACKUP_REMOTE_DEST:-}" ]; then
   echo "==> Syncing to $BACKUP_REMOTE_DEST"
+  rclone copy "$BACKUP_DIR/shouko-$STAMP.db.gz" "$BACKUP_REMOTE_DEST"
   rclone copy "$BACKUP_DIR/data-$STAMP.tar.gz" "$BACKUP_REMOTE_DEST"
 else
   echo "==> BACKUP_REMOTE_DEST not set — backup is LOCAL ONLY, not off-site."
 fi
 
 echo "==> Pruning backups older than $RETENTION_DAYS days"
-find "$BACKUP_DIR" -name "*.tar.gz" -mtime "+$RETENTION_DAYS" -delete
+find "$BACKUP_DIR" -name "shouko-*.db.gz" -mtime "+$RETENTION_DAYS" -delete
+find "$BACKUP_DIR" -name "data-*.tar.gz" -mtime "+$RETENTION_DAYS" -delete
 
-echo "==> Done: $BACKUP_DIR/data-$STAMP.tar.gz"
+echo "==> Done: $BACKUP_DIR/shouko-$STAMP.db.gz, $BACKUP_DIR/data-$STAMP.tar.gz"
