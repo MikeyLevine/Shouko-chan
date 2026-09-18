@@ -377,6 +377,158 @@ def generate_leaderboard_card(title, entries, accent_hex=DEFAULT_ACCENT):
 
 
 SLOTS_ACCENT = "#e8b923"  # warm gold, casino feel - fixed, not user customization
+TABLE_ACCENT = "#1f7a4d"  # felt green, for blackjack/poker - distinct from slots' gold
+
+PLAYING_CARD_SIZE = (100, 140)
+CARD_FACE_COLOR = (250, 250, 245)
+CARD_BACK_COLOR = (35, 40, 90)
+CARD_BORDER_COLOR = (180, 180, 180)
+RED_SUIT_COLOR = (200, 30, 30)
+BLACK_SUIT_COLOR = (25, 25, 30)
+
+
+def _draw_card_face(rank, suit):
+    w, h = PLAYING_CARD_SIZE
+    img = Image.new("RGB", (w, h), CARD_FACE_COLOR)
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((1, 1, w - 2, h - 2), radius=10, outline=CARD_BORDER_COLOR, width=2)
+
+    color = RED_SUIT_COLOR if suit in ("♥", "♦") else BLACK_SUIT_COLOR
+    font_rank = ImageFont.truetype(FONT_BOLD, 28)
+    font_suit = ImageFont.truetype(FONT_BOLD, 24)
+
+    draw.text((10, 6), rank, font=font_rank, fill=color)
+    draw.text((10, 38), suit, font=font_suit, fill=color)
+
+    rank_w, rank_h, _ = _text_size(draw, rank, font_rank)
+    suit_w, suit_h, _ = _text_size(draw, suit, font_suit)
+    draw.text((w - 10 - rank_w, h - 10 - rank_h), rank, font=font_rank, fill=color)
+    draw.text((w - 10 - suit_w, h - 42 - suit_h), suit, font=font_suit, fill=color)
+    return img
+
+
+def _draw_card_back():
+    w, h = PLAYING_CARD_SIZE
+    img = Image.new("RGB", (w, h), CARD_BACK_COLOR)
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((1, 1, w - 2, h - 2), radius=10, outline=(15, 15, 40), width=2)
+    draw.rounded_rectangle((10, 10, w - 11, h - 11), radius=6, outline=(95, 100, 170), width=3)
+    return img
+
+
+def _compose_card_row(cards, hide_first=False, held=None):
+    """cards: list of 'RANKSUIT' strings like '10♠'. Returns an RGBA strip
+    image - held (optional list of bool, same length as cards) draws a
+    small tag under held cards, for /poker."""
+    w, h = PLAYING_CARD_SIZE
+    gap = 10
+    tag_h = 20 if held else 0
+    n = len(cards)
+    row = Image.new("RGBA", (n * w + (n - 1) * gap, h + tag_h), (0, 0, 0, 0))
+    font_tag = ImageFont.truetype(FONT_BOLD, 13)
+
+    for i, card_str in enumerate(cards):
+        x = i * (w + gap)
+        if hide_first and i == 0:
+            face = _draw_card_back()
+        else:
+            face = _draw_card_face(card_str[:-1], card_str[-1])
+        row.paste(face, (x, 0))
+        if held and held[i]:
+            tag_draw = ImageDraw.Draw(row)
+            tag_draw.rectangle((x, h + 2, x + w, h + tag_h), fill=(80, 200, 120, 255))
+            tw, th, ty_off = _text_size(tag_draw, "HELD", font_tag)
+            tag_draw.text((x + w / 2 - tw / 2, h + 2 - ty_off + (tag_h - 2 - th) / 2), "HELD", font=font_tag, fill=(15, 15, 15))
+    return row
+
+
+def generate_blackjack_image(player_hand, player_total, dealer_hand, dealer_total, reveal_dealer, bet, result_text=None):
+    accent = hex_to_rgb(TABLE_ACCENT)
+    card_w, card_h = PLAYING_CARD_SIZE
+    max_cards = max(len(player_hand), len(dealer_hand))
+    content_w = max_cards * card_w + (max_cards - 1) * 10
+    width = max(content_w + 80, 500)
+
+    top_margin, label_gap, hand_gap, after_dealer_gap = 24, 34, 24, 20
+    bet_line_h, bottom_margin = 30, 20
+    result_line_h = 34 if result_text else 0
+    height = (top_margin + label_gap + card_h + hand_gap + label_gap + card_h
+              + after_dealer_gap + result_line_h + bet_line_h + bottom_margin)
+
+    card = _render_background((width, height), DEFAULT_BACKGROUND, accent)
+    draw = ImageDraw.Draw(card)
+
+    font_label = ImageFont.truetype(FONT_BOLD, 22)
+    font_result = ImageFont.truetype(FONT_BOLD, 22)
+    font_stats = ImageFont.truetype(FONT_REGULAR, 20)
+
+    y = top_margin
+    draw.text((30, y), f"Your hand ({player_total})", font=font_label, fill=TEXT_COLOR)
+    y += label_gap
+    player_row = _compose_card_row(player_hand)
+    card.paste(player_row, (30, y), player_row)
+    y += card_h + hand_gap
+
+    draw = ImageDraw.Draw(card)
+    dealer_label = f"Dealer's hand ({dealer_total})" if reveal_dealer else "Dealer's hand"
+    draw.text((30, y), dealer_label, font=font_label, fill=TEXT_COLOR)
+    y += label_gap
+    dealer_row = _compose_card_row(dealer_hand, hide_first=not reveal_dealer)
+    card.paste(dealer_row, (30, y), dealer_row)
+    y += card_h + after_dealer_gap
+
+    draw = ImageDraw.Draw(card)
+    if result_text:
+        draw.text((30, y), result_text, font=font_result, fill=accent)
+        y += result_line_h
+
+    draw.text((30, y), f"Bet: {bet} Aura", font=font_stats, fill=MUTED_COLOR)
+    draw.rounded_rectangle((4, 4, width - 4, height - 4), radius=20, outline=accent, width=3)
+
+    buffer = io.BytesIO()
+    card.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
+
+
+def generate_poker_image(hand, held, bet, result_text=None):
+    accent = hex_to_rgb(TABLE_ACCENT)
+    card_w, card_h = PLAYING_CARD_SIZE
+    n = len(hand)
+    content_w = n * card_w + (n - 1) * 10
+    width = max(content_w + 80, 500)
+
+    top_margin, label_gap, tag_h, after_cards_gap = 24, 34, 20, 20
+    bet_line_h, bottom_margin = 30, 20
+    result_line_h = 34 if result_text else 0
+    height = top_margin + label_gap + card_h + tag_h + after_cards_gap + result_line_h + bet_line_h + bottom_margin
+
+    card = _render_background((width, height), DEFAULT_BACKGROUND, accent)
+    draw = ImageDraw.Draw(card)
+
+    font_label = ImageFont.truetype(FONT_BOLD, 22)
+    font_result = ImageFont.truetype(FONT_BOLD, 22)
+    font_stats = ImageFont.truetype(FONT_REGULAR, 20)
+
+    y = top_margin
+    draw.text((30, y), "Your hand", font=font_label, fill=TEXT_COLOR)
+    y += label_gap
+    row = _compose_card_row(hand, held=held)
+    card.paste(row, (30, y), row)
+    y += card_h + tag_h + after_cards_gap
+
+    draw = ImageDraw.Draw(card)
+    if result_text:
+        draw.text((30, y), result_text, font=font_result, fill=accent)
+        y += result_line_h
+
+    draw.text((30, y), f"Bet: {bet} Aura", font=font_stats, fill=MUTED_COLOR)
+    draw.rounded_rectangle((4, 4, width - 4, height - 4), radius=20, outline=accent, width=3)
+
+    buffer = io.BytesIO()
+    card.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
 
 
 def generate_slots_card(reels, bet, net, new_balance, result_text, won):

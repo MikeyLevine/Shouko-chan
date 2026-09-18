@@ -4,6 +4,8 @@ from discord import app_commands
 from collections import Counter
 import random
 
+from cogs.profile.card import generate_poker_image
+
 MIN_BET = 10
 SUITS = ["♠", "♥", "♦", "♣"]
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
@@ -99,7 +101,8 @@ class HoldButton(discord.ui.Button):
         view.held[self.index] = not view.held[self.index]
         self.style = discord.ButtonStyle.success if view.held[self.index] else discord.ButtonStyle.secondary
         self.label = f"{view.hand[self.index]} 🔒" if view.held[self.index] else view.hand[self.index]
-        await interaction.response.edit_message(embed=view.build_embed(), view=view)
+        embed, file = view.build_payload()
+        await interaction.response.edit_message(embed=embed, attachments=[file], view=view)
 
 
 class DrawButton(discord.ui.Button):
@@ -131,15 +134,15 @@ class VideoPokerView(discord.ui.View):
             self.add_item(HoldButton(i, card))
         self.add_item(DrawButton())
 
-    def build_embed(self, result_text=None):
+    def build_payload(self, result_text=None):
+        """result_text must be plain (no emoji) - it's drawn into the
+        image with the regular text font, which can't render color
+        emoji (see cogs/profile/card.py's notes on this)."""
+        buffer = generate_poker_image(self.hand, self.held, self.bet, result_text=result_text)
+        file = discord.File(buffer, filename="poker.png")
         embed = discord.Embed(title="🎴 Video Poker - Jacks or Better", color=discord.Color.blurple())
-        if result_text:
-            embed.description = result_text
-        embed.add_field(name="Your hand", value="  ".join(self.hand), inline=False)
-        held_positions = [str(i + 1) for i, held in enumerate(self.held) if held]
-        embed.add_field(name="Held", value=", ".join(held_positions) if held_positions else "None", inline=False)
-        embed.add_field(name="Bet", value=f"{self.bet} Aura", inline=False)
-        return embed
+        embed.set_image(url="attachment://poker.png")
+        return embed, file
 
     async def draw_and_resolve(self, interaction):
         self.resolved = True
@@ -157,19 +160,19 @@ class VideoPokerView(discord.ui.View):
         if multiplier > 0:
             payout = self.bet * multiplier
             aura_cog.add_balance(self.guild_id, self.user_id, payout)
-            result_text = f"🎉 {hand_name}! You win **{payout}** Aura ({multiplier}x)"
+            result_text = f"{hand_name}! You win {payout} Aura ({multiplier}x)"
         else:
-            result_text = "😢 No winning hand."
+            result_text = "No winning hand."
 
         new_balance = aura_cog.get_balance(self.guild_id, self.user_id)
-        embed = self.build_embed(result_text=result_text)
+        embed, file = self.build_payload(result_text=result_text)
         embed.set_footer(text=f"Balance: {new_balance} Aura")
 
         if interaction is not None:
-            await interaction.response.edit_message(embed=embed, view=self)
+            await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
         elif self.message is not None:
             try:
-                await self.message.edit(embed=embed, view=self)
+                await self.message.edit(embed=embed, attachments=[file], view=self)
             except discord.HTTPException:
                 pass
 
@@ -205,7 +208,8 @@ class VideoPoker(commands.Cog):
         hand = [deck.pop() for _ in range(5)]
 
         view = VideoPokerView(self.bot, interaction.guild.id, interaction.user.id, bet, deck, hand)
-        await interaction.response.send_message(embed=view.build_embed(), view=view)
+        embed, file = view.build_payload()
+        await interaction.response.send_message(embed=embed, file=file, view=view)
         view.message = await interaction.original_response()
 
 async def setup(bot):

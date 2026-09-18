@@ -3,6 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import random
 
+from cogs.profile.card import generate_blackjack_image
+
 MIN_BET = 10
 SUITS = ["♠", "♥", "♦", "♣"]
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
@@ -32,12 +34,6 @@ def hand_value(hand):
     return total
 
 
-def format_hand(hand, hide_first=False):
-    if hide_first:
-        return f"🂠 {' '.join(hand[1:])}"
-    return " ".join(hand)
-
-
 class BlackjackView(discord.ui.View):
     def __init__(self, bot, guild_id, user_id, bet, deck, player_hand, dealer_hand):
         super().__init__(timeout=60)
@@ -57,25 +53,26 @@ class BlackjackView(discord.ui.View):
             return False
         return True
 
-    def build_embed(self, reveal_dealer=False, result_text=None):
+    def build_payload(self, reveal_dealer=False, result_text=None):
+        """result_text must be plain (no emoji) - it's drawn into the
+        image with the regular text font, which can't render color
+        emoji (see cogs/profile/card.py's notes on this)."""
         player_total = hand_value(self.player_hand)
+        dealer_total = hand_value(self.dealer_hand) if reveal_dealer else 0
+        buffer = generate_blackjack_image(
+            self.player_hand, player_total, self.dealer_hand, dealer_total,
+            reveal_dealer, self.bet, result_text=result_text
+        )
+        file = discord.File(buffer, filename="blackjack.png")
         embed = discord.Embed(title="🃏 Blackjack", color=discord.Color.dark_green())
-        if result_text:
-            embed.description = result_text
-        embed.add_field(name="Your hand", value=f"{format_hand(self.player_hand)} (**{player_total}**)", inline=False)
-        if reveal_dealer:
-            dealer_total = hand_value(self.dealer_hand)
-            embed.add_field(name="Dealer's hand", value=f"{format_hand(self.dealer_hand)} (**{dealer_total}**)", inline=False)
-        else:
-            embed.add_field(name="Dealer's hand", value=format_hand(self.dealer_hand, hide_first=True), inline=False)
-        embed.add_field(name="Bet", value=f"{self.bet} Aura", inline=False)
-        return embed
+        embed.set_image(url="attachment://blackjack.png")
+        return embed, file
 
-    async def _update(self, interaction, embed):
+    async def _update(self, interaction, embed, file):
         if interaction is not None:
-            await interaction.response.edit_message(embed=embed, view=self)
+            await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
         elif self.message is not None:
-            await self.message.edit(embed=embed, view=self)
+            await self.message.edit(embed=embed, attachments=[file], view=self)
 
     async def end_game(self, interaction, outcome):
         # outcome: "blackjack", "win", "push", or "lose"
@@ -88,20 +85,20 @@ class BlackjackView(discord.ui.View):
         if outcome == "blackjack":
             profit = int(self.bet * 1.5)
             aura_cog.add_balance(self.guild_id, self.user_id, self.bet + profit)
-            result_text = f"🂡 Blackjack! You win **{profit}** Aura."
+            result_text = f"Blackjack! You win {profit} Aura"
         elif outcome == "win":
             aura_cog.add_balance(self.guild_id, self.user_id, self.bet * 2)
-            result_text = f"✅ You win **{self.bet}** Aura."
+            result_text = f"You win! +{self.bet} Aura"
         elif outcome == "push":
             aura_cog.add_balance(self.guild_id, self.user_id, self.bet)
-            result_text = "🤝 Push - your bet was returned."
+            result_text = "Push - your bet was returned."
         else:
-            result_text = f"❌ You lost **{self.bet}** Aura."
+            result_text = f"You lost {self.bet} Aura"
 
         new_balance = aura_cog.get_balance(self.guild_id, self.user_id)
-        embed = self.build_embed(reveal_dealer=True, result_text=result_text)
+        embed, file = self.build_payload(reveal_dealer=True, result_text=result_text)
         embed.set_footer(text=f"Balance: {new_balance} Aura")
-        await self._update(interaction, embed)
+        await self._update(interaction, embed, file)
 
     async def dealer_play_and_resolve(self, interaction):
         while hand_value(self.dealer_hand) < 17:
@@ -124,7 +121,8 @@ class BlackjackView(discord.ui.View):
         if hand_value(self.player_hand) > 21:
             await self.end_game(interaction, "lose")
             return
-        await self._update(interaction, self.build_embed())
+        embed, file = self.build_payload()
+        await self._update(interaction, embed, file)
 
     @discord.ui.button(label="Stand", style=discord.ButtonStyle.red)
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -164,7 +162,8 @@ class Blackjack(commands.Cog):
 
         view = BlackjackView(self.bot, interaction.guild.id, interaction.user.id, bet, deck, player_hand, dealer_hand)
 
-        await interaction.response.send_message(embed=view.build_embed(), view=view)
+        embed, file = view.build_payload()
+        await interaction.response.send_message(embed=embed, file=file, view=view)
         view.message = await interaction.original_response()
 
         if hand_value(player_hand) == 21:
