@@ -46,11 +46,18 @@ class ReactionRoles(commands.Cog):
                 self.reaction_roles = {}
             for role in roles:
                 try:
-                    emoji, role_id = role.split(':')
+                    # rsplit on the LAST colon only - a custom emoji like
+                    # <:pepe:123456789012345678> already contains colons of
+                    # its own, so splitting on every colon breaks it.
+                    emoji_str, role_id = role.rsplit(':', 1)
                     role_id = int(role_id.strip())
                     guild_role = interaction.guild.get_role(role_id)
                     if guild_role:
-                        self.reaction_roles[emoji.strip()] = role_id
+                        # Normalize through PartialEmoji so custom emoji are
+                        # stored/reacted-with in the exact form discord.py
+                        # expects, matching what on_raw_reaction_add sees.
+                        partial_emoji = discord.PartialEmoji.from_str(emoji_str.strip())
+                        self.reaction_roles[str(partial_emoji)] = role_id
                     else:
                         await interaction.response.send_message(f"Role with ID {role_id} not found.", ephemeral=True)
                         return
@@ -84,7 +91,7 @@ class ReactionRoles(commands.Cog):
                 message = new_message
 
             for emoji in self.reaction_roles.keys():
-                await message.add_reaction(emoji)
+                await message.add_reaction(discord.PartialEmoji.from_str(emoji))
 
             await interaction.response.send_message("Reaction roles set up successfully.", ephemeral=True)
             print(f"[DEBUG] Reaction roles setup complete for message {self.role_message_id}")  # Debug
