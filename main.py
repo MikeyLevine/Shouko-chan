@@ -48,6 +48,11 @@ cogs = [
     'cogs.games.giveaway',
     'cogs.games.rps',
     'cogs.games.trivia',
+    'cogs.games.blackjack',
+    'cogs.games.slots',
+
+    # Economy commands
+    'cogs.economy.aura',
 
     # Info commands
     'cogs.info.help',

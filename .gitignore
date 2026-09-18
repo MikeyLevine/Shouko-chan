@@ -30,6 +30,7 @@ trivia_sessions.json
 trivia_sessions_backup.json
 inandout_config.json
 trivia.json
+aura.json
 
 # Logs
 *.log
