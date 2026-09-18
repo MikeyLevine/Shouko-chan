@@ -100,6 +100,14 @@ class Aura(commands.Cog):
         self.save_data()
         return entry["balance"]
 
+    def set_balance(self, guild_id, user_id, amount):
+        """Clamps to 0 - used by owner tools that adjust a balance directly
+        rather than earning/spending it."""
+        entry = self.ensure_account(guild_id, user_id)
+        entry["balance"] = max(0, amount)
+        self.save_data()
+        return entry["balance"]
+
     def remove_balance(self, guild_id, user_id, amount):
         """Returns False (and leaves the balance untouched) if funds are
         insufficient, True if the amount was deducted."""
