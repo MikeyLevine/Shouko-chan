@@ -151,6 +151,47 @@ class Aura(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="richest", description="Show the Aura leaderboard")
+    @app_commands.describe(scope="This server only, or aggregated across every server the bot is in")
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="This server", value="server"),
+        app_commands.Choice(name="Global (all servers)", value="global"),
+    ])
+    async def richest(self, interaction: discord.Interaction, scope: app_commands.Choice[str] = None):
+        scope_value = scope.value if scope else "server"
+
+        if scope_value == "server":
+            if not interaction.guild:
+                await interaction.response.send_message("Server scope only works inside a server.", ephemeral=True)
+                return
+            guild_data = self.balances.get(str(interaction.guild.id), {})
+            ranked = sorted(guild_data.items(), key=lambda item: item[1].get("balance", 0), reverse=True)
+            title = f"💰 Richest - {interaction.guild.name}"
+        else:
+            totals = {}
+            for guild_data in self.balances.values():
+                for user_id, entry in guild_data.items():
+                    totals[user_id] = totals.get(user_id, 0) + entry.get("balance", 0)
+            ranked = [
+                (user_id, {"balance": total})
+                for user_id, total in sorted(totals.items(), key=lambda item: item[1], reverse=True)
+            ]
+            title = "💰 Global Richest (all servers combined)"
+
+        if not ranked:
+            await interaction.response.send_message("No Aura data yet.", ephemeral=True)
+            return
+
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        lines = []
+        for rank, (user_id, entry) in enumerate(ranked[:10], start=1):
+            user = self.bot.get_user(int(user_id))
+            name = user.display_name if user else f"Unknown User ({user_id})"
+            lines.append(f"{medals.get(rank, f'#{rank}')} **{name}** - {entry['balance']} Aura")
+
+        embed = discord.Embed(title=title, description="\n".join(lines), color=discord.Color.gold())
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="daily", description="Claim your daily Aura")
     async def daily(self, interaction: discord.Interaction):
         if not interaction.guild:
