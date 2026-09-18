@@ -54,6 +54,7 @@ cogs = [
 
     # Economy commands
     'cogs.economy.aura',
+    'cogs.economy.shop',
 
     # Info commands
     'cogs.info.help',

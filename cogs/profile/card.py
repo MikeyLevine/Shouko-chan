@@ -8,7 +8,7 @@ _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 FONT_BOLD = os.path.join(_ASSETS_DIR, "DejaVuSans-Bold.ttf")
 FONT_REGULAR = os.path.join(_ASSETS_DIR, "DejaVuSans.ttf")
 
-CARD_SIZE = (900, 300)
+CARD_SIZE = (900, 320)
 BG_COLOR = (30, 30, 35)
 TEXT_COLOR = (255, 255, 255)
 MUTED_COLOR = (170, 170, 180)
@@ -46,6 +46,8 @@ def generate_profile_card(
     aura_balance,
     bio,
     accent_hex,
+    prefix_text="",
+    title_text=None,
 ):
     try:
         accent = hex_to_rgb(accent_hex)
@@ -58,7 +60,7 @@ def generate_profile_card(
     draw.rectangle((0, 0, 10, CARD_SIZE[1]), fill=accent)
 
     avatar_size = 180
-    avatar_pos = (40, 60)
+    avatar_pos = (40, 70)
     if avatar_bytes:
         avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGB").resize((avatar_size, avatar_size))
     else:
@@ -73,18 +75,23 @@ def generate_profile_card(
 
     font_name = ImageFont.truetype(FONT_BOLD, 42)
     font_label = ImageFont.truetype(FONT_REGULAR, 22)
+    font_title = ImageFont.truetype(FONT_BOLD, 20)
     font_bio = ImageFont.truetype(FONT_REGULAR, 20)
     font_bar = ImageFont.truetype(FONT_REGULAR, 20)
 
-    draw.text((text_x, 40), _truncate(username, 22), font=font_name, fill=TEXT_COLOR)
+    display_name = f"{prefix_text} {username}".strip() if prefix_text else username
+    draw.text((text_x, 30), _truncate(display_name, 24), font=font_name, fill=TEXT_COLOR)
 
     rank_text = f"Rank #{rank}/{total_ranked}" if rank else "Unranked"
-    draw.text((text_x, 100), f"{rank_text}   •   Level {level}   •   {aura_balance} Aura", font=font_label, fill=MUTED_COLOR)
+    draw.text((text_x, 85), f"{rank_text}   •   Level {level}   •   {aura_balance} Aura", font=font_label, fill=MUTED_COLOR)
+
+    if title_text:
+        draw.text((text_x, 118), f"✦ {title_text}", font=font_title, fill=accent)
 
     if bio:
-        draw.text((text_x, 140), _truncate(bio, 60), font=font_bio, fill=MUTED_COLOR)
+        draw.text((text_x, 152), _truncate(bio, 60), font=font_bio, fill=MUTED_COLOR)
 
-    bar_x, bar_y = text_x, 200
+    bar_x, bar_y = text_x, 220
     bar_w, bar_h = CARD_SIZE[0] - text_x - 40, 28
     draw.rounded_rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), radius=14, fill=BAR_BG_COLOR)
 

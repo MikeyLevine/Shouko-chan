@@ -32,6 +32,7 @@ inandout_config.json
 trivia.json
 aura.json
 profiles.json
+shop_inventory.json
 
 # Logs
 *.log

@@ -77,13 +77,18 @@ class Profile(commands.Cog):
         aura_balance = aura_cog.get_balance(interaction.guild.id, target.id) if aura_cog else 0
         profile_data = self.get_entry(target.id)
 
+        shop_cog = self.bot.get_cog("Shop")
+        prefix_text, title_text, nickname = ("", None, None)
+        if shop_cog:
+            prefix_text, title_text, nickname = shop_cog.get_display_extras(interaction.guild.id, target.id)
+
         try:
             avatar_bytes = await target.display_avatar.with_size(256).read()
         except discord.HTTPException:
             avatar_bytes = None
 
         buffer = generate_profile_card(
-            username=target.display_name,
+            username=nickname or target.display_name,
             avatar_bytes=avatar_bytes,
             level=level,
             exp_into_level=exp_into_level,
@@ -93,6 +98,8 @@ class Profile(commands.Cog):
             aura_balance=aura_balance,
             bio=profile_data.get("bio", ""),
             accent_hex=profile_data.get("color", DEFAULT_ACCENT),
+            prefix_text=prefix_text,
+            title_text=title_text,
         )
 
         await interaction.followup.send(file=discord.File(buffer, filename="profile.png"))
