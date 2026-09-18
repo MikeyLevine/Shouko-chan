@@ -1,68 +1,57 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, ui
-import json
-import os
 import re
 import time
 from collections import defaultdict
-import shutil
 
-CONFIG_FILE = "data/automod_config.json"
-BACKUP_FILE = "data/automod_config_backup.json"
+import db
 
 class Automod(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.message_cache = defaultdict(list)
-        self.config = self.load_config()
         print("[DEBUG] Automod cog loaded")
-
-    def load_config(self):
-        if not os.path.exists(CONFIG_FILE):
-            self.save_config({})
-            return {}
-
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, dict):
-                raise ValueError("Config root must be a dictionary")
-            return data
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"[WARN] automod_config.json is corrupted: {e}. Creating backup and resetting.")
-            shutil.copy(CONFIG_FILE, BACKUP_FILE)
-            self.save_config({})
-            return {}
-
-    def save_config(self, data=None):
-        if data is not None:
-            self.config = data
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=4)
-        print("[DEBUG] Automod config saved")
 
     def get_guild_config(self, guild_id):
         guild_id = str(guild_id)
-        if guild_id not in self.config:
-            self.config[guild_id] = {
-                "spam_threshold": 5,
-                "caps_limit": 70,
-                "mention_limit": 5,
-                "link_filter": True,
-                "promotion_filter": True,
-                "blacklisted_words": [],
-                "auto_mute_threshold": 3,
-                "auto_kick_threshold": 5
-            }
-            self.save_config()
-        return self.config[guild_id]
+        row = db.connection.execute("SELECT * FROM automod_config WHERE guild_id = ?", (guild_id,)).fetchone()
+        if row is None:
+            db.connection.execute("INSERT INTO automod_config (guild_id) VALUES (?)", (guild_id,))
+            db.connection.commit()
+            row = db.connection.execute("SELECT * FROM automod_config WHERE guild_id = ?", (guild_id,)).fetchone()
+
+        cfg = dict(row)
+        cfg["link_filter"] = bool(cfg["link_filter"])
+        cfg["promotion_filter"] = bool(cfg["promotion_filter"])
+        cfg["blacklisted_words"] = [
+            r["word"] for r in db.connection.execute(
+                "SELECT word FROM automod_blacklisted_words WHERE guild_id = ?", (guild_id,)
+            ).fetchall()
+        ]
+        return cfg
+
+    def set_guild_config(self, guild_id, **kwargs):
+        guild_id = str(guild_id)
+        self.get_guild_config(guild_id)  # ensure a row exists first
+        words = kwargs.pop("blacklisted_words", None)
+        if kwargs:
+            values = [int(v) if isinstance(v, bool) else v for v in kwargs.values()]
+            set_clause = ", ".join(f"{k} = ?" for k in kwargs)
+            db.connection.execute(f"UPDATE automod_config SET {set_clause} WHERE guild_id = ?", (*values, guild_id))
+        if words is not None:
+            db.connection.execute("DELETE FROM automod_blacklisted_words WHERE guild_id = ?", (guild_id,))
+            for word in words:
+                db.connection.execute(
+                    "INSERT INTO automod_blacklisted_words (guild_id, word) VALUES (?, ?)", (guild_id, word)
+                )
+        db.connection.commit()
 
     async def warn_user(self, guild_id, member: discord.Member, reason: str):
         warnings_cog = self.bot.get_cog("Warnings")
         if warnings_cog:
             await warnings_cog.warn_manual(guild_id, member, reason)
-            total_warnings = len(warnings_cog.warnings.get(str(member.id), []))
+            total_warnings = len(warnings_cog.get_warnings(member.id))
             guild_cfg = self.get_guild_config(guild_id)
             if total_warnings >= guild_cfg.get("auto_kick_threshold", 5):
                 await member.kick(reason="Reached auto-kick threshold")
@@ -158,37 +147,22 @@ class Automod(commands.Cog):
                 )
                 return
 
-            cfg = self.cog.get_guild_config(self.guild_id)
-
             if self.selected_level == "low":
-                cfg.update({
-                    "spam_threshold": 10,
-                    "caps_limit": 90,
-                    "mention_limit": 5,
-                    "link_filter": True,
-                    "promotion_filter": True,
-                    "blacklisted_words": []
-                })
+                self.cog.set_guild_config(
+                    self.guild_id, spam_threshold=10, caps_limit=90, mention_limit=5,
+                    link_filter=True, promotion_filter=True, blacklisted_words=[]
+                )
             elif self.selected_level == "medium":
-                cfg.update({
-                    "spam_threshold": 5,
-                    "caps_limit": 70,
-                    "mention_limit": 3,
-                    "link_filter": True,
-                    "promotion_filter": True,
-                    "blacklisted_words": []
-                })
+                self.cog.set_guild_config(
+                    self.guild_id, spam_threshold=5, caps_limit=70, mention_limit=3,
+                    link_filter=True, promotion_filter=True, blacklisted_words=[]
+                )
             elif self.selected_level == "high":
-                cfg.update({
-                    "spam_threshold": 3,
-                    "caps_limit": 50,
-                    "mention_limit": 2,
-                    "link_filter": True,
-                    "promotion_filter": True,
-                    "blacklisted_words": ["badword1", "badword2"]
-                })
+                self.cog.set_guild_config(
+                    self.guild_id, spam_threshold=3, caps_limit=50, mention_limit=2,
+                    link_filter=True, promotion_filter=True, blacklisted_words=["badword1", "badword2"]
+                )
 
-            self.cog.save_config()
             await interaction.response.send_message(
                 f"Automod setup saved! Level: **{self.selected_level}**", ephemeral=True
             )

@@ -1,10 +1,10 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, ui
-import json
 import os
 
-TICKETS_FILE = "data/tickets.json"
+import db
+
 OWNER_ROLE_NAMES = ["Admin", "Moderator"]  # Staff roles that can see tickets
 TRANSCRIPTS_FOLDER = "data/ticket_transcripts"
 
@@ -23,25 +23,22 @@ class TicketButton(ui.View):
         guild = interaction.guild
         member = interaction.user
 
-        # Load tickets JSON
-        tickets = {}
-        if os.path.exists(TICKETS_FILE):
-            with open(TICKETS_FILE, "r") as f:
-                tickets = json.load(f)
+        # Prevent duplicate tickets for same user
+        existing = db.connection.execute(
+            "SELECT channel_id FROM tickets WHERE user_id = ?", (str(member.id),)
+        ).fetchone()
+        if existing:
+            existing_channel = guild.get_channel(int(existing["channel_id"]))
+            if existing_channel:
+                await interaction.response.send_message(
+                    f"You already have an open ticket: {existing_channel.mention}", ephemeral=True
+                )
+                return
 
         # Assign ticket number
-        ticket_number = len(tickets) + 1
+        ticket_count = db.connection.execute("SELECT COUNT(*) AS c FROM tickets").fetchone()["c"]
+        ticket_number = ticket_count + 1
         ticket_name = f"ticket-{ticket_number:03d}"
-
-        # Prevent duplicate tickets for same user
-        for t_id, t_info in tickets.items():
-            if t_info["user_id"] == member.id:
-                existing_channel = guild.get_channel(int(t_id))
-                if existing_channel:
-                    await interaction.response.send_message(
-                        f"You already have an open ticket: {existing_channel.mention}", ephemeral=True
-                    )
-                    return
 
         # Create category if not exists
         category = discord.utils.get(guild.categories, name="Tickets")
@@ -65,13 +62,11 @@ class TicketButton(ui.View):
         )
 
         # Log ticket
-        tickets[str(ticket_channel.id)] = {
-            "user_id": member.id,
-            "guild_id": guild.id,
-            "ticket_number": ticket_number
-        }
-        with open(TICKETS_FILE, "w") as f:
-            json.dump(tickets, f, indent=4)
+        db.connection.execute(
+            "INSERT INTO tickets (channel_id, user_id, guild_id, ticket_number) VALUES (?, ?, ?, ?)",
+            (str(ticket_channel.id), str(member.id), str(guild.id), ticket_number)
+        )
+        db.connection.commit()
 
         await ticket_channel.send(
             f"Hello {member.mention}! {self.open_message}\nStaff will be with you shortly.\nType `/ticketclose` to close this ticket."
@@ -111,32 +106,26 @@ class Ticket(commands.Cog):
     @app_commands.command(name="ticketclose", description="Close this ticket")
     async def ticketclose(self, interaction: discord.Interaction):
         channel = interaction.channel
-        if not os.path.exists(TICKETS_FILE):
-            await interaction.response.send_message("No tickets found.", ephemeral=True)
-            return
+        row = db.connection.execute(
+            "SELECT * FROM tickets WHERE channel_id = ?", (str(channel.id),)
+        ).fetchone()
 
-        with open(TICKETS_FILE, "r") as f:
-            tickets = json.load(f)
-
-        if str(channel.id) not in tickets:
+        if not row:
             await interaction.response.send_message("This is not a ticket channel.", ephemeral=True)
             return
-
-        ticket_info = tickets[str(channel.id)]
 
         # Create transcript
         messages = [msg async for msg in channel.history(limit=None, oldest_first=True)]
         transcript_path = os.path.join(
-            TRANSCRIPTS_FOLDER, f"ticket-{ticket_info['ticket_number']:03d}.txt"
+            TRANSCRIPTS_FOLDER, f"ticket-{row['ticket_number']:03d}.txt"
         )
         with open(transcript_path, "w", encoding="utf-8") as f:
             for msg in messages:
                 f.write(f"[{msg.created_at}] {msg.author}: {msg.content}\n")
 
-        # Remove ticket from JSON
-        del tickets[str(channel.id)]
-        with open(TICKETS_FILE, "w") as f:
-            json.dump(tickets, f, indent=4)
+        # Remove ticket from the database
+        db.connection.execute("DELETE FROM tickets WHERE channel_id = ?", (str(channel.id),))
+        db.connection.commit()
 
         await interaction.response.send_message(
             f"Ticket closed. Transcript saved: `{transcript_path}`"
@@ -146,4 +135,3 @@ class Ticket(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Ticket(bot))
-

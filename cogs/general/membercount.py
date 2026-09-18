@@ -1,30 +1,32 @@
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-import json
-import os
 
-CHANNEL_FILE = "data/channel_ids.json"
+import db
 
 class MemberCount(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.channel_ids = self.load_channel_ids()
         self.update_stats.start()
         print("[DEBUG] MemberCount cog loaded")
 
     def cog_unload(self):
         self.update_stats.cancel()
 
-    def load_channel_ids(self):
-        if os.path.exists(CHANNEL_FILE):
-            with open(CHANNEL_FILE, "r") as f:
-                return json.load(f)
-        return {}
+    def get_channel_id(self, guild_id, stat_name):
+        row = db.connection.execute(
+            "SELECT channel_id FROM stat_channels WHERE guild_id = ? AND stat_name = ?",
+            (str(guild_id), stat_name)
+        ).fetchone()
+        return int(row["channel_id"]) if row else None
 
-    def save_channel_ids(self):
-        with open(CHANNEL_FILE, "w") as f:
-            json.dump(self.channel_ids, f, indent=4)
+    def set_channel_id(self, guild_id, stat_name, channel_id):
+        db.connection.execute(
+            "INSERT INTO stat_channels (guild_id, stat_name, channel_id) VALUES (?, ?, ?) "
+            "ON CONFLICT(guild_id, stat_name) DO UPDATE SET channel_id = excluded.channel_id",
+            (str(guild_id), stat_name, str(channel_id))
+        )
+        db.connection.commit()
 
     @tasks.loop(minutes=5)
     async def update_stats(self):
@@ -38,9 +40,7 @@ class MemberCount(commands.Cog):
             }
 
             for stat_name, stat_value in stats.items():
-                key = f"{guild.id}_{stat_name}"
-                channel_id = self.channel_ids.get(key)
-
+                channel_id = self.get_channel_id(guild.id, stat_name)
                 if channel_id:
                     channel = guild.get_channel(channel_id)
                     if channel:
@@ -76,20 +76,18 @@ class MemberCount(commands.Cog):
 
             # Create or update the channels manually
             for stat_name, stat_value in stats.items():
-                key = f"{guild.id}_{stat_name}"
                 channel_name = f"{stat_name}: {stat_value}"
+                existing_id = self.get_channel_id(guild.id, stat_name)
 
-                if key in self.channel_ids:
-                    channel = guild.get_channel(self.channel_ids[key])
+                if existing_id:
+                    channel = guild.get_channel(existing_id)
                     if channel:
                         if channel.name != channel_name:
                             await channel.edit(name=channel_name)
                         continue  # Already exists, updated
                 # Create new channel
                 new_channel = await guild.create_voice_channel(channel_name, category=category, overwrites=overwrites)
-                self.channel_ids[key] = new_channel.id
-
-            self.save_channel_ids()
+                self.set_channel_id(guild.id, stat_name, new_channel.id)
 
             await interaction.followup.send("Server statistics channels created/updated.", ephemeral=True)
 

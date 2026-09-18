@@ -34,6 +34,12 @@ aura.json
 profiles.json
 shop_inventory.json
 
+# SQLite database (replaces the JSON files above - see db.py) and its
+# WAL-mode sidecar files
+shouko.db
+shouko.db-wal
+shouko.db-shm
+
 # Logs
 *.log
 

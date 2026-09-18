@@ -1,10 +1,9 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, ui
-import json
-import os
 
-CONFIG_FILE = "data/onjoin.json"
+import db
+
 OWNER_ID = 1255466299258306611  # Replace with your Discord ID
 
 DEFAULT_EMBED = {
@@ -39,24 +38,22 @@ class OnJoin(commands.Cog):
         print("[DEBUG] OnJoin cog loaded")
 
     def load_config(self):
-        if not os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(DEFAULT_EMBED, f, indent=4)
-            return DEFAULT_EMBED.copy()
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, dict):
-                raise ValueError("Config must be a dictionary")
-            return data
-        except (json.JSONDecodeError, ValueError):
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(DEFAULT_EMBED, f, indent=4)
-            return DEFAULT_EMBED.copy()
+        row = db.connection.execute("SELECT * FROM onjoin_config WHERE id = 1").fetchone()
+        if row is None or row["title"] is None:
+            self.config = DEFAULT_EMBED.copy()
+            self.save_config()
+            return self.config
+        return dict(row)
 
     def save_config(self):
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=4)
+        db.connection.execute(
+            "INSERT INTO onjoin_config (id, title, description, footer, image_url) VALUES (1, ?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET "
+            "title = excluded.title, description = excluded.description, "
+            "footer = excluded.footer, image_url = excluded.image_url",
+            (self.config.get("title"), self.config.get("description"), self.config.get("footer"), self.config.get("image_url"))
+        )
+        db.connection.commit()
         print("[DEBUG] OnJoin config saved")
 
     # Event: Bot joins a new guild

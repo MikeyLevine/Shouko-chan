@@ -1,41 +1,41 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import json
-import os
+
+import db
 
 class Warnings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.warnings = self.load_warnings()
         print("[DEBUG] Warnings cog loaded")  # Debug output
 
-    def load_warnings(self):
-        if os.path.exists("data/warnings.json"):
-            with open("data/warnings.json", "r") as f:
-                data = json.load(f)
-            print(f"[DEBUG] Loaded warnings data: {data}")  # Debug
-            return data
-        return {}
+    def get_warnings(self, user_id):
+        rows = db.connection.execute(
+            "SELECT reason FROM warnings WHERE user_id = ? ORDER BY id", (str(user_id),)
+        ).fetchall()
+        return [r["reason"] for r in rows]
 
-    def save_warnings(self):
-        with open("data/warnings.json", "w") as f:
-            json.dump(self.warnings, f)
-        print(f"[DEBUG] Saved warnings data: {self.warnings}")  # Debug
+    async def warn_manual(self, guild_id, member, reason):
+        """Programmatic warn used by automod's auto-escalation - not a slash
+        command. (guild_id is unused: warnings are tracked globally per
+        user, same pre-existing behavior as before this migration.)"""
+        db.connection.execute("INSERT INTO warnings (user_id, reason) VALUES (?, ?)", (str(member.id), reason))
+        db.connection.commit()
 
     @app_commands.command(name="warn", description="Warn a user")
     @app_commands.checks.has_permissions(administrator=True)
     async def warn(self, interaction: discord.Interaction, user: discord.Member, reason: str):
-        self.warnings.setdefault(str(user.id), []).append(reason)
-        self.save_warnings()
+        db.connection.execute("INSERT INTO warnings (user_id, reason) VALUES (?, ?)", (str(user.id), reason))
+        db.connection.commit()
         await interaction.response.send_message(f"{user.mention} has been warned for: {reason}", ephemeral=True)
         print(f"[DEBUG] {user} warned for: {reason}")  # Debug
 
     @app_commands.command(name="warnings", description="View warnings for a user")
     @app_commands.checks.has_permissions(administrator=True)
     async def warnings(self, interaction: discord.Interaction, user: discord.Member):
-        if str(user.id) in self.warnings and self.warnings[str(user.id)]:
-            warnings_list = "\n".join(self.warnings[str(user.id)])
+        reasons = self.get_warnings(user.id)
+        if reasons:
+            warnings_list = "\n".join(reasons)
             await interaction.response.send_message(f"{user.mention} has the following warnings:\n{warnings_list}", ephemeral=True)
         else:
             await interaction.response.send_message(f"{user.mention} has no warnings.", ephemeral=True)
@@ -44,9 +44,9 @@ class Warnings(commands.Cog):
     @app_commands.command(name="warnremove", description="Remove all warnings for a user")
     @app_commands.checks.has_permissions(administrator=True)
     async def warnremove(self, interaction: discord.Interaction, user: discord.Member):
-        if str(user.id) in self.warnings:
-            del self.warnings[str(user.id)]
-            self.save_warnings()
+        if self.get_warnings(user.id):
+            db.connection.execute("DELETE FROM warnings WHERE user_id = ?", (str(user.id),))
+            db.connection.commit()
             await interaction.response.send_message(f"All warnings for {user.mention} have been removed.", ephemeral=True)
             print(f"[DEBUG] Warnings removed for {user}")  # Debug
         else:

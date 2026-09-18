@@ -1,10 +1,10 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import json
 import os
 
-SERVER_FILE = "data/server_list.json"
+import db
+
 OWNER_ID = 1255466299258306611  # Your Discord ID
 
 class ServerCommand(commands.Cog):
@@ -13,7 +13,7 @@ class ServerCommand(commands.Cog):
         print("[DEBUG] ServerCommand cog loaded")
 
     @app_commands.command(
-        name="server", 
+        name="server",
         description="Get a list of all servers the bot is in with invite links"
     )
     async def server(self, interaction: discord.Interaction):
@@ -26,10 +26,6 @@ class ServerCommand(commands.Cog):
 
         # Defer the response to prevent timeout
         await interaction.response.defer(ephemeral=True)
-
-        # Delete old server file if exists
-        if os.path.exists(SERVER_FILE):
-            os.remove(SERVER_FILE)
 
         # Gather guild info
         guilds_info = []
@@ -52,9 +48,14 @@ class ServerCommand(commands.Cog):
                 "invite": invite_url
             })
 
-        # Save new server list
-        with open(SERVER_FILE, "w", encoding="utf-8") as f:
-            json.dump(guilds_info, f, indent=4, ensure_ascii=False)
+        # Replace known_guilds with the fresh list
+        db.connection.execute("DELETE FROM known_guilds")
+        for g in guilds_info:
+            db.connection.execute(
+                "INSERT INTO known_guilds (guild_id, name, member_count, invite) VALUES (?, ?, ?, ?)",
+                (str(g["id"]), g["name"], g["member_count"], g["invite"])
+            )
+        db.connection.commit()
 
         # Prepare message
         message_lines = [

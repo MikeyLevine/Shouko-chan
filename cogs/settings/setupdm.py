@@ -1,8 +1,8 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import json
-import os
+
+import db
 
 OWNER_ID = 1255466299258306611  # Replace with your Discord user ID
 
@@ -15,15 +15,16 @@ class SetupDM(commands.Cog):
         return interaction.user.id == OWNER_ID
 
     def load_dm_channel_id(self):
-        if os.path.exists("data/dm_channel.json"):
-            with open("data/dm_channel.json", "r") as f:
-                data = json.load(f)
-                return data.get("dm_channel_id")
-        return None
+        row = db.connection.execute("SELECT channel_id FROM dm_relay_config WHERE id = 1").fetchone()
+        return int(row["channel_id"]) if row and row["channel_id"] else None
 
     def save_dm_channel_id(self):
-        with open("data/dm_channel.json", "w") as f:
-            json.dump({"dm_channel_id": self.dm_channel_id}, f)
+        db.connection.execute(
+            "INSERT INTO dm_relay_config (id, channel_id) VALUES (1, ?) "
+            "ON CONFLICT(id) DO UPDATE SET channel_id = excluded.channel_id",
+            (str(self.dm_channel_id) if self.dm_channel_id else None,)
+        )
+        db.connection.commit()
 
     @app_commands.command(name="setupdm", description="Set up a channel to receive DMs")
     @app_commands.check(is_owner)

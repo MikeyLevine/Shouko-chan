@@ -1,10 +1,9 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import json
-import os
 import re
 
+import db
 from .card import generate_profile_card, DEFAULT_ACCENT
 
 MAX_BIO_LENGTH = 100
@@ -14,28 +13,23 @@ HEX_RE = re.compile(r'^#?[0-9a-fA-F]{6}$')
 class Profile(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.data_file = "data/profiles.json"
-        self.profiles = self.load_data()
         print("[DEBUG] Profile cog loaded")
 
-    def load_data(self):
-        if os.path.exists(self.data_file):
-            with open(self.data_file, "r") as f:
-                return json.load(f)
-        return {}
-
-    def save_data(self):
-        with open(self.data_file, "w") as f:
-            json.dump(self.profiles, f, indent=4)
-
     def get_entry(self, user_id):
-        return self.profiles.setdefault(str(user_id), {"color": DEFAULT_ACCENT, "bio": ""})
+        user_id = str(user_id)
+        row = db.connection.execute("SELECT * FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
+        if row is None:
+            db.connection.execute("INSERT INTO profiles (user_id) VALUES (?)", (user_id,))
+            db.connection.commit()
+            row = db.connection.execute("SELECT * FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
+        return row
 
     @app_commands.command(name="setbio", description="Set your profile bio")
     @app_commands.describe(text=f"Your bio text (max {MAX_BIO_LENGTH} characters)")
     async def setbio(self, interaction: discord.Interaction, text: app_commands.Range[str, 0, MAX_BIO_LENGTH]):
-        self.get_entry(interaction.user.id)["bio"] = text
-        self.save_data()
+        self.get_entry(interaction.user.id)
+        db.connection.execute("UPDATE profiles SET bio = ? WHERE user_id = ?", (text, str(interaction.user.id)))
+        db.connection.commit()
         await interaction.response.send_message("✅ Bio updated.", ephemeral=True)
 
     @app_commands.command(name="setcolor", description="Set your profile accent color (hex, e.g. #ff5500)")
@@ -46,8 +40,9 @@ class Profile(commands.Cog):
             return
         if not hex_color.startswith('#'):
             hex_color = '#' + hex_color
-        self.get_entry(interaction.user.id)["color"] = hex_color
-        self.save_data()
+        self.get_entry(interaction.user.id)
+        db.connection.execute("UPDATE profiles SET color = ? WHERE user_id = ?", (hex_color, str(interaction.user.id)))
+        db.connection.commit()
         await interaction.response.send_message(f"✅ Accent color set to `{hex_color}`.", ephemeral=True)
 
     @app_commands.command(name="profile", description="Show your (or someone else's) profile card")
@@ -63,16 +58,12 @@ class Profile(commands.Cog):
         leveling_cog = self.bot.get_cog("Leveling")
         aura_cog = self.bot.get_cog("Aura")
 
-        guild_data = leveling_cog.user_data.get(str(interaction.guild.id), {}) if leveling_cog else {}
-        entry = guild_data.get(str(target.id), {"exp": 0})
-
         if leveling_cog:
-            level, exp_into_level, exp_needed = leveling_cog.get_level_progress(entry.get("exp", 0))
+            exp = leveling_cog.get_exp(interaction.guild.id, target.id)
+            level, exp_into_level, exp_needed = leveling_cog.get_level_progress(exp)
+            rank, total_ranked = leveling_cog.get_rank(interaction.guild.id, target.id)
         else:
-            level, exp_into_level, exp_needed = 1, 0, 100
-
-        ranked = sorted(guild_data.items(), key=lambda item: item[1].get("exp", 0), reverse=True)
-        rank = next((i + 1 for i, (uid, _) in enumerate(ranked) if uid == str(target.id)), None)
+            level, exp_into_level, exp_needed, rank, total_ranked = 1, 0, 100, None, 0
 
         aura_balance = aura_cog.get_balance(interaction.guild.id, target.id) if aura_cog else 0
         profile_data = self.get_entry(target.id)
@@ -94,10 +85,10 @@ class Profile(commands.Cog):
             exp_into_level=exp_into_level,
             exp_needed_for_level=exp_needed,
             rank=rank,
-            total_ranked=len(ranked),
+            total_ranked=total_ranked,
             aura_balance=aura_balance,
-            bio=profile_data.get("bio", ""),
-            accent_hex=profile_data.get("color", DEFAULT_ACCENT),
+            bio=profile_data["bio"],
+            accent_hex=profile_data["color"],
             prefix_text=prefix_text,
             title_text=title_text,
         )

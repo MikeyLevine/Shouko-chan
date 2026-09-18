@@ -1,34 +1,37 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import json
-import os
+
+import db
 
 class ReactionRoles(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.data_file = 'data/reaction_roles.json'
-        self.role_message_id = None
-        self.reaction_roles = {}
-        self.load_data()
         print("[DEBUG] ReactionRoles cog loaded")  # Debug output
 
-    def load_data(self):
-        if os.path.exists(self.data_file):
-            with open(self.data_file, 'r') as f:
-                data = json.load(f)
-                self.role_message_id = data.get('role_message_id')
-                self.reaction_roles = data.get('reaction_roles', {})
-            print(f"[DEBUG] Loaded reaction roles data: {self.reaction_roles}")  # Debug
+    def get_role_message_id(self):
+        row = db.connection.execute("SELECT role_message_id FROM reaction_role_config WHERE id = 1").fetchone()
+        return int(row["role_message_id"]) if row and row["role_message_id"] else None
 
-    def save_data(self):
-        data = {
-            'role_message_id': self.role_message_id,
-            'reaction_roles': self.reaction_roles
-        }
-        with open(self.data_file, 'w') as f:
-            json.dump(data, f)
-        print(f"[DEBUG] Saved reaction roles data: {self.reaction_roles}")  # Debug
+    def get_reaction_roles(self):
+        rows = db.connection.execute("SELECT emoji, role_id FROM reaction_role_mappings").fetchall()
+        return {r["emoji"]: int(r["role_id"]) for r in rows}
+
+    def set_role_message_id(self, message_id):
+        db.connection.execute(
+            "INSERT INTO reaction_role_config (id, role_message_id) VALUES (1, ?) "
+            "ON CONFLICT(id) DO UPDATE SET role_message_id = excluded.role_message_id",
+            (str(message_id),)
+        )
+        db.connection.commit()
+
+    def replace_reaction_roles(self, mapping):
+        db.connection.execute("DELETE FROM reaction_role_mappings")
+        for emoji, role_id in mapping.items():
+            db.connection.execute(
+                "INSERT INTO reaction_role_mappings (emoji, role_id) VALUES (?, ?)", (emoji, str(role_id))
+            )
+        db.connection.commit()
 
     @app_commands.command(name="setupreactionroles", description="Set up or add to reaction roles")
     @app_commands.checks.has_permissions(administrator=True)
@@ -41,9 +44,8 @@ class ReactionRoles(commands.Cog):
                 await interaction.response.send_message("Message not found. Please check the message ID.", ephemeral=True)
                 return
 
+            new_mapping = self.get_reaction_roles() if add else {}
             roles = roles.split(',')
-            if not add:
-                self.reaction_roles = {}
             for role in roles:
                 try:
                     # rsplit on the LAST colon only - a custom emoji like
@@ -57,7 +59,7 @@ class ReactionRoles(commands.Cog):
                         # stored/reacted-with in the exact form discord.py
                         # expects, matching what on_raw_reaction_add sees.
                         partial_emoji = discord.PartialEmoji.from_str(emoji_str.strip())
-                        self.reaction_roles[str(partial_emoji)] = role_id
+                        new_mapping[str(partial_emoji)] = role_id
                     else:
                         await interaction.response.send_message(f"Role with ID {role_id} not found.", ephemeral=True)
                         return
@@ -65,8 +67,8 @@ class ReactionRoles(commands.Cog):
                     await interaction.response.send_message("Invalid format. Use `emoji:role_id`.", ephemeral=True)
                     return
 
-            self.role_message_id = message_id
-            self.save_data()
+            self.replace_reaction_roles(new_mapping)
+            self.set_role_message_id(message_id)
 
             embed = message.embeds[0] if add and message.embeds else discord.Embed(
                 title=title or "",
@@ -77,7 +79,7 @@ class ReactionRoles(commands.Cog):
             if title: embed.title = title
             if description: embed.description = description
 
-            for emoji, role_id in self.reaction_roles.items():
+            for emoji, role_id in new_mapping.items():
                 guild_role = interaction.guild.get_role(role_id)
                 if guild_role and not any(field.name == emoji for field in embed.fields):
                     embed.add_field(name=emoji, value=guild_role.name, inline=False)
@@ -86,29 +88,28 @@ class ReactionRoles(commands.Cog):
                 await message.edit(embed=embed)
             except discord.Forbidden:
                 new_message = await interaction.channel.send(embed=embed)
-                self.role_message_id = new_message.id
-                self.save_data()
+                self.set_role_message_id(new_message.id)
                 message = new_message
 
-            for emoji in self.reaction_roles.keys():
+            for emoji in new_mapping.keys():
                 await message.add_reaction(discord.PartialEmoji.from_str(emoji))
 
             await interaction.response.send_message("Reaction roles set up successfully.", ephemeral=True)
-            print(f"[DEBUG] Reaction roles setup complete for message {self.role_message_id}")  # Debug
+            print(f"[DEBUG] Reaction roles setup complete for message {message_id}")  # Debug
         except Exception as e:
             await interaction.response.send_message(f"An error occurred: {e}", ephemeral=True)
             print(f"[ERROR] setupreactionroles error: {e}")
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        if payload.message_id != self.role_message_id:
+        if payload.message_id != self.get_role_message_id():
             return
 
         guild = self.bot.get_guild(payload.guild_id)
         if not guild:
             return
 
-        role_id = self.reaction_roles.get(str(payload.emoji))
+        role_id = self.get_reaction_roles().get(str(payload.emoji))
         if not role_id:
             return
 
@@ -125,14 +126,14 @@ class ReactionRoles(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
-        if payload.message_id != self.role_message_id:
+        if payload.message_id != self.get_role_message_id():
             return
 
         guild = self.bot.get_guild(payload.guild_id)
         if not guild:
             return
 
-        role_id = self.reaction_roles.get(str(payload.emoji))
+        role_id = self.get_reaction_roles().get(str(payload.emoji))
         if not role_id:
             return
 

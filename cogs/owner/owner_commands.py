@@ -91,13 +91,11 @@ class OwnerCommands(commands.Cog):
             if not leveling_cog:
                 await interaction.response.send_message("⚠️ Leveling system is not available right now.", ephemeral=True)
                 return
-            entry = leveling_cog.get_user_entry(interaction.guild.id, member.id)
-            entry["exp"] = max(0, entry["exp"] + amount)
-            entry["level"] = leveling_cog.calculate_level(entry["exp"])
-            leveling_cog.save_user_data()
+            current_exp = leveling_cog.get_exp(interaction.guild.id, member.id)
+            new_exp, new_level = leveling_cog.set_exp(interaction.guild.id, member.id, current_exp + amount)
             await interaction.response.send_message(
                 f"✅ {verb} **{abs(amount)}** XP {direction} {member.mention}. "
-                f"New total: **{entry['exp']}** XP (Level {entry['level']}).",
+                f"New total: **{new_exp}** XP (Level {new_level}).",
                 ephemeral=True
             )
 

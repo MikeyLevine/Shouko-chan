@@ -8,68 +8,45 @@ import random
 import urllib.parse
 import traceback
 
+import db
+
 class Trivia(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.data_file = "data/trivia.json"
-        self.sessions_file = "data/trivia_sessions.json"
         self.active_sessions = {}  # {channel_id: session_data}
-        self.data = {"global_leaderboard": {}, "server_leaderboards": {}}
         self.session_token = os.getenv("OPENTDB_TOKEN")  # Optional token
 
-        os.makedirs("data", exist_ok=True)
-        self.load_data()
         self.load_sessions()
         print("[DEBUG] Trivia cog loaded")
 
-    # ------------------- JSON Handling -------------------
-    def load_data(self):
-        try:
-            if os.path.exists(self.data_file):
-                with open(self.data_file, "r") as f:
-                    self.data = json.load(f)
-                print("[DEBUG] Trivia leaderboard loaded")
-            else:
-                self.save_data()
-        except Exception as e:
-            print(f"[ERROR] Failed to load trivia data: {e}")
-            traceback.print_exc()
-
-    def save_data(self):
-        try:
-            with open(self.data_file, "w") as f:
-                json.dump(self.data, f)
-            print("[DEBUG] Trivia leaderboard saved")
-        except Exception as e:
-            print(f"[ERROR] Failed to save trivia data: {e}")
-            traceback.print_exc()
-
+    # ------------------- Session persistence -------------------
     def load_sessions(self):
-        if os.path.exists(self.sessions_file):
-            try:
-                with open(self.sessions_file, "r") as f:
-                    self.active_sessions = json.load(f)
-                print("[DEBUG] Trivia sessions loaded")
-            except Exception:
-                print("[WARNING] trivia_sessions.json is corrupted. Starting with empty sessions.")
-                self.active_sessions = {}
-        else:
-            self.save_sessions()
+        try:
+            rows = db.connection.execute("SELECT * FROM trivia_sessions").fetchall()
+            self.active_sessions = {}
+            for row in rows:
+                self.active_sessions[row["channel_id"]] = {
+                    "question": json.loads(row["question_json"]) if row["question_json"] else None,
+                    "players": json.loads(row["players_json"]) if row["players_json"] else {},
+                    "category": row["category"],
+                }
+            print("[DEBUG] Trivia sessions loaded")
+        except Exception as e:
+            print(f"[ERROR] Failed to load trivia sessions: {e}")
+            traceback.print_exc()
 
     def save_sessions(self):
         try:
             # Only save persistent data (no live objects like message or interaction)
-            data_to_save = {}
+            db.connection.execute("DELETE FROM trivia_sessions")
             for cid, session in self.active_sessions.items():
-                data_to_save[cid] = {
-                    "question": session.get("question"),
-                    "players": session.get("players", {}),
-                    "category": session.get("category"),
-                    "message_id": session.get("message").id if session.get("message") else None,
-                    "channel_id": session.get("message").channel.id if session.get("message") else None
-                }
-            with open(self.sessions_file, "w") as f:
-                json.dump(data_to_save, f)
+                message = session.get("message")
+                db.connection.execute(
+                    "INSERT INTO trivia_sessions (channel_id, question_json, players_json, category, message_id) VALUES (?, ?, ?, ?, ?)",
+                    (cid, json.dumps(session.get("question")), json.dumps(session.get("players", {})),
+                     session.get("category"), str(message.id) if message else None)
+                )
+            db.connection.commit()
             print("[DEBUG] Trivia sessions saved")
         except Exception as e:
             print(f"[ERROR] Failed to save trivia sessions: {e}")
@@ -173,20 +150,17 @@ class Trivia(commands.Cog):
     # ------------------- Leaderboard -------------------
     def update_leaderboard(self, guild_id, user_id, win):
         try:
-            gl = self.data["global_leaderboard"]
-            if user_id not in gl:
-                gl[user_id] = {"wins": 0, "games_played": 0}
-            gl[user_id]["games_played"] += 1
-            gl[user_id]["wins"] += win
-
-            sid = str(guild_id)
-            sl = self.data["server_leaderboards"].setdefault(sid, {})
-            if user_id not in sl:
-                sl[user_id] = {"wins": 0, "games_played": 0}
-            sl[user_id]["games_played"] += 1
-            sl[user_id]["wins"] += win
-
-            self.save_data()
+            for scope in ("global", str(guild_id)):
+                db.connection.execute(
+                    "INSERT INTO trivia_stats (scope, user_id, wins, games_played) VALUES (?, ?, 0, 0) "
+                    "ON CONFLICT(scope, user_id) DO NOTHING",
+                    (scope, user_id)
+                )
+                db.connection.execute(
+                    "UPDATE trivia_stats SET games_played = games_played + 1, wins = wins + ? WHERE scope = ? AND user_id = ?",
+                    (win, scope, user_id)
+                )
+            db.connection.commit()
         except Exception as e:
             print(f"[ERROR] Failed to update leaderboard: {e}")
             traceback.print_exc()
@@ -263,14 +237,17 @@ class Trivia(commands.Cog):
     @app_commands.command(name="trivia_leaderboard", description="Show trivia leaderboard")
     @app_commands.describe(type="global or server", top="Top N users")
     async def trivia_leaderboard(self, interaction: discord.Interaction, type: str = "server", top: int = 10):
-        lb = self.data["server_leaderboards"].get(str(interaction.guild_id), {}) if type == "server" else self.data["global_leaderboard"]
-        sorted_lb = sorted(lb.items(), key=lambda x: x[1]["wins"], reverse=True)[:top]
+        scope = str(interaction.guild_id) if type == "server" else "global"
+        rows = db.connection.execute(
+            "SELECT user_id, wins, games_played FROM trivia_stats WHERE scope = ? ORDER BY wins DESC LIMIT ?",
+            (scope, top)
+        ).fetchall()
 
         desc = ""
-        for uid, stats in sorted_lb:
-            member = interaction.guild.get_member(int(uid)) if interaction.guild else None
-            name = member.display_name if member else f"User {uid}"
-            desc += f"**{name}** - Wins: {stats['wins']}, Games: {stats['games_played']}\n"
+        for row in rows:
+            member = interaction.guild.get_member(int(row["user_id"])) if interaction.guild else None
+            name = member.display_name if member else f"User {row['user_id']}"
+            desc += f"**{name}** - Wins: {row['wins']}, Games: {row['games_played']}\n"
 
         embed = discord.Embed(title=f"Trivia Leaderboard ({type})", description=desc or "No data yet.", color=discord.Color.green())
         await interaction.response.send_message(embed=embed)

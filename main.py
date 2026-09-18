@@ -1,21 +1,22 @@
 import discord
 from discord.ext import commands
 import os
-import json
 from dotenv import load_dotenv
 import asyncio
 from discord import app_commands
 
+import db
+
 load_dotenv()
 
-with open('data/config.json', 'r') as f:
-    config = json.load(f)
-prefix = config.get('prefix', '!')
-welcome_message = config.get('welcome_message', 'Welcome to the server, {member}!')
-goodbye_message = config.get('goodbye_message', 'Goodbye, {member}. We will miss you!')
-log_channel_id = config.get('log_channel_id')
-welcome_channel_id = config.get('welcome_channel_id')
-announcement_channel_id = config.get('announcement_channel_id')
+config_row = db.connection.execute("SELECT * FROM bot_config WHERE id = 1").fetchone()
+config = dict(config_row) if config_row else {}
+prefix = config.get('prefix') or '!'
+welcome_message = config.get('welcome_message') or 'Welcome to the server, {member}!'
+goodbye_message = config.get('goodbye_message') or 'Goodbye, {member}. We will miss you!'
+log_channel_id = int(config['log_channel_id']) if config.get('log_channel_id') else None
+welcome_channel_id = int(config['welcome_channel_id']) if config.get('welcome_channel_id') else None
+announcement_channel_id = int(config['announcement_channel_id']) if config.get('announcement_channel_id') else None
 
 token = os.getenv('TOKEN')
 owner_id = int(os.getenv("OWNER_ID", 0))  # Set your Discord ID in .env

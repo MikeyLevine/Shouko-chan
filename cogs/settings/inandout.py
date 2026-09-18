@@ -1,39 +1,31 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import json
-import os
 
-CONFIG_FILE = "data/inandout_config.json"
+import db
 
 class InAndOut(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.guild_configs = self.load_configs()
         print("[DEBUG] InAndOut cog loaded")  # debug on cog load
 
-    def load_configs(self):
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
-        return {}
-
-    def save_configs(self):
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(self.guild_configs, f, indent=4)
-
     def get_guild_config(self, guild_id):
-        return self.guild_configs.get(str(guild_id), {})
+        row = db.connection.execute(
+            "SELECT * FROM inandout_config WHERE guild_id = ?", (str(guild_id),)
+        ).fetchone()
+        return dict(row) if row else {}
 
     def set_guild_config(self, guild_id, welcome, goodbye, channel_id, welcome_image=None, goodbye_image=None):
-        self.guild_configs[str(guild_id)] = {
-            "welcome_message": welcome,
-            "goodbye_message": goodbye,
-            "announcement_channel_id": channel_id,
-            "welcome_image": welcome_image,
-            "goodbye_image": goodbye_image
-        }
-        self.save_configs()
+        db.connection.execute(
+            "INSERT INTO inandout_config (guild_id, welcome_message, goodbye_message, announcement_channel_id, welcome_image, goodbye_image) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(guild_id) DO UPDATE SET "
+            "welcome_message = excluded.welcome_message, goodbye_message = excluded.goodbye_message, "
+            "announcement_channel_id = excluded.announcement_channel_id, "
+            "welcome_image = excluded.welcome_image, goodbye_image = excluded.goodbye_image",
+            (str(guild_id), welcome, goodbye, str(channel_id), welcome_image, goodbye_image)
+        )
+        db.connection.commit()
 
     @app_commands.command(
         name="setup",
@@ -80,7 +72,7 @@ class InAndOut(commands.Cog):
         welcome_image = config.get("welcome_image")
         print(f"[DEBUG] Member joined: {member.name} in guild {guild_id}")
         if welcome_msg and channel_id:
-            channel = member.guild.get_channel(channel_id)
+            channel = member.guild.get_channel(int(channel_id))
             if channel:
                 embed = discord.Embed(description=welcome_msg.format(member=member.mention), color=discord.Color.green())
                 if welcome_image:
@@ -100,7 +92,7 @@ class InAndOut(commands.Cog):
         goodbye_image = config.get("goodbye_image")
         print(f"[DEBUG] Member left: {member.name} in guild {guild_id}")
         if goodbye_msg and channel_id:
-            channel = member.guild.get_channel(channel_id)
+            channel = member.guild.get_channel(int(channel_id))
             if channel:
                 embed = discord.Embed(description=goodbye_msg.format(member=member.mention), color=discord.Color.red())
                 if goodbye_image:

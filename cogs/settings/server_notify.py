@@ -1,9 +1,8 @@
 import discord
 from discord.ext import commands
-import json
-import os
 
-SERVER_FILE = "data/server_list.json"
+import db
+
 OWNER_ID = 1255466299258306611  # Your Discord ID
 
 class ServerNotify(commands.Cog):
@@ -11,16 +10,21 @@ class ServerNotify(commands.Cog):
         self.bot = bot
         print("[DEBUG] ServerNotify cog loaded")
 
-    async def update_server_list(self):
-        """Update server_list.json with current guilds."""
-        guilds_info = [{"id": g.id, "name": g.name, "member_count": g.member_count} for g in self.bot.guilds]
-        with open(SERVER_FILE, "w") as f:
-            json.dump(guilds_info, f, indent=4)
+    def update_server_list(self):
+        """Replace known_guilds with the current guild list. No invite
+        links here (unlike /server) - this fires on every join/leave, so
+        generating an invite each time would be wasteful and spammy."""
+        db.connection.execute("DELETE FROM known_guilds")
+        for g in self.bot.guilds:
+            db.connection.execute(
+                "INSERT INTO known_guilds (guild_id, name, member_count, invite) VALUES (?, ?, ?, NULL)",
+                (str(g.id), g.name, g.member_count)
+            )
+        db.connection.commit()
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-        # Update server_list.json
-        await self.update_server_list()
+        self.update_server_list()
 
         # DM owner with new server info
         owner = await self.bot.fetch_user(OWNER_ID)
@@ -42,9 +46,7 @@ class ServerNotify(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
-        # Update server_list.json
-        await self.update_server_list()
+        self.update_server_list()
 
 async def setup(bot):
     await bot.add_cog(ServerNotify(bot))
-
