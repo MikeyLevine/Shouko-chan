@@ -9,19 +9,35 @@ MAX_NICKNAME_LENGTH = 32
 NICKNAME_TOKEN_PRICE = 2000
 
 # Cosmetic catalog - plain constants, easy to add to/reprice later.
+# Prefix symbols are checked against the card font's actual glyph coverage
+# (via fontTools) before being added here - DejaVu Sans has no color-emoji
+# glyphs, so anything from the pictographic emoji blocks renders as a tofu
+# box on the card. Stick to the classic Miscellaneous Symbols/Dingbats
+# ranges (U+2600-27BF) plus card-suit/chess symbols, which DejaVu covers.
 TITLES = [
+    {"id": "rookie", "name": "Rookie", "price": 100},
     {"id": "regular", "name": "Regular", "price": 200},
+    {"id": "grinder", "name": "Grinder", "price": 500},
     {"id": "high_roller", "name": "High Roller", "price": 1000},
     {"id": "big_spender", "name": "Big Spender", "price": 2500},
+    {"id": "whale_hunter", "name": "Whale Hunter", "price": 4000},
     {"id": "legend", "name": "Legend", "price": 5000},
+    {"id": "degenerate", "name": "Degenerate", "price": 7500},
     {"id": "aura_whale", "name": "Aura Whale", "price": 10000},
+    {"id": "ascended", "name": "Ascended", "price": 20000},
 ]
 PREFIXES = [
     {"id": "star", "name": "★", "price": 300},
     {"id": "hollow_star", "name": "☆", "price": 300},
+    {"id": "spade", "name": "♠", "price": 500},
+    {"id": "heart", "name": "♥", "price": 500},
+    {"id": "club", "name": "♣", "price": 500},
     {"id": "vip", "name": "[VIP]", "price": 1500},
+    {"id": "lightning", "name": "⚡", "price": 2000},
     {"id": "crown", "name": "♛", "price": 3000},
+    {"id": "swords", "name": "⚔", "price": 4000},
     {"id": "gem", "name": "◆", "price": 5000},
+    {"id": "skull", "name": "☠", "price": 6000},
 ]
 TITLES_BY_ID = {t["id"]: t for t in TITLES}
 PREFIXES_BY_ID = {p["id"]: p for p in PREFIXES}
