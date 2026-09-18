@@ -5,6 +5,7 @@ import time
 import random
 
 import db
+from cogs.profile.card import generate_leaderboard_card
 
 STARTING_BALANCE = 500
 MIN_EARN = 5
@@ -160,26 +161,36 @@ class Aura(commands.Cog):
                 "SELECT user_id, balance FROM aura_accounts WHERE guild_id = ? ORDER BY balance DESC LIMIT 10",
                 (str(interaction.guild.id),)
             ).fetchall()
-            title = f"💰 Richest - {interaction.guild.name}"
+            title = f"Richest - {interaction.guild.name}"
         else:
             rows = db.connection.execute(
                 "SELECT user_id, SUM(balance) AS balance FROM aura_accounts GROUP BY user_id ORDER BY balance DESC LIMIT 10"
             ).fetchall()
-            title = "💰 Global Richest (all servers combined)"
+            title = "Global Richest (all servers combined)"
 
         if not rows:
             await interaction.response.send_message("No Aura data yet.", ephemeral=True)
             return
 
-        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-        lines = []
+        await interaction.response.defer()
+
+        entries = []
         for rank, row in enumerate(rows, start=1):
             user = self.bot.get_user(int(row["user_id"]))
             name = user.display_name if user else f"Unknown User ({row['user_id']})"
-            lines.append(f"{medals.get(rank, f'#{rank}')} **{name}** - {row['balance']} Aura")
+            avatar_bytes = None
+            if user:
+                try:
+                    avatar_bytes = await user.display_avatar.with_size(128).read()
+                except discord.HTTPException:
+                    avatar_bytes = None
+            entries.append({
+                "rank": rank, "name": name, "avatar_bytes": avatar_bytes,
+                "value_text": f"{row['balance']} Aura"
+            })
 
-        embed = discord.Embed(title=title, description="\n".join(lines), color=discord.Color.gold())
-        await interaction.response.send_message(embed=embed)
+        buffer = generate_leaderboard_card(title, entries)
+        await interaction.followup.send(file=discord.File(buffer, filename="richest.png"))
 
     @app_commands.command(name="daily", description="Claim your daily Aura")
     async def daily(self, interaction: discord.Interaction):

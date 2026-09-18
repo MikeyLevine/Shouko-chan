@@ -3,9 +3,16 @@ from discord.ext import commands
 from discord import app_commands
 import random
 
+from cogs.profile.card import generate_slots_card
+
 MIN_BET = 10
 
-# (symbol, spin weight) - lower weight = rarer.
+# (symbol, spin weight) - lower weight = rarer. "🎰" stands in for the
+# traditional lucky-seven slot - the actual keycap-seven emoji ("7️⃣") is a
+# multi-codepoint sequence that doesn't render as a colored glyph through
+# Pillow's basic text shaping (falls back to a plain gray "7"), while 🎰
+# is a single codepoint that renders correctly and is thematically an
+# even better fit (it's literally a slot machine showing 777).
 SYMBOLS = [
     ("🍒", 40),
     ("🍋", 30),
@@ -13,12 +20,12 @@ SYMBOLS = [
     ("🍉", 15),
     ("⭐", 8),
     ("💎", 4),
-    ("7️⃣", 2),
+    ("🎰", 2),
 ]
 
 # Payout multiplier for landing three of a symbol.
 JACKPOT_MULTIPLIERS = {
-    "7️⃣": 20,
+    "🎰": 20,
     "💎": 12,
     "⭐": 8,
     "🍉": 5,
@@ -37,10 +44,10 @@ def spin():
 def resolve(reels, bet):
     if reels[0] == reels[1] == reels[2]:
         winnings = bet * JACKPOT_MULTIPLIERS[reels[0]]
-        return winnings, f"🎉 Jackpot! Three {reels[0]} in a row!"
+        return winnings, "JACKPOT! Three in a row!"
     if reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
         winnings = int(bet * PAIR_MULTIPLIER)
-        return winnings, "✨ Two matching symbols!"
+        return winnings, "Two matching symbols!"
     return 0, "No match - better luck next time."
 
 
@@ -74,15 +81,8 @@ class Slots(commands.Cog):
         net = winnings - bet
         new_balance = aura_cog.get_balance(interaction.guild.id, interaction.user.id)
 
-        embed = discord.Embed(
-            title="🎰 Slots",
-            description=f"[ {' | '.join(reels)} ]\n\n{result_text}",
-            color=discord.Color.gold() if winnings > 0 else discord.Color.red()
-        )
-        embed.add_field(name="Bet", value=f"{bet} Aura", inline=True)
-        embed.add_field(name="Net", value=f"{'+' if net >= 0 else ''}{net} Aura", inline=True)
-        embed.set_footer(text=f"Balance: {new_balance} Aura")
-        await interaction.response.send_message(embed=embed)
+        buffer = generate_slots_card(reels, bet, net, new_balance, result_text, won=winnings > 0)
+        await interaction.response.send_message(file=discord.File(buffer, filename="slots.png"))
 
 async def setup(bot):
     await bot.add_cog(Slots(bot))

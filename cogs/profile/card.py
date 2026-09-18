@@ -10,6 +10,34 @@ _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 FONT_BOLD = os.path.join(_ASSETS_DIR, "DejaVuSans-Bold.ttf")
 FONT_REGULAR = os.path.join(_ASSETS_DIR, "DejaVuSans.ttf")
 
+# DejaVu has no color-emoji glyphs (see the shop/prefix note elsewhere in
+# this file) - full-color emoji, like every /slots symbol, need an actual
+# color-glyph font. This is a host package (fonts-noto-color-emoji, ~11MB),
+# not bundled in the repo like the DejaVu fonts are - dev and prod share
+# this one server/filesystem, so installing it once covers both, and 11MB
+# is too much to want in git for a font only one feature needs.
+NOTO_EMOJI_FONT = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+# This is a bitmap ("strike") font with exactly one baked-in size - any
+# other size raises "OSError: invalid pixel size" (found by testing 100,
+# 128, and 136 - all failed; only 109 works). Not a font size in the usual
+# scalable-outline sense, just the fixed dimensions of the baked bitmap.
+NOTO_EMOJI_SIZE = 109
+_emoji_font_cache = None
+_emoji_font_load_attempted = False
+
+
+def _emoji_font():
+    """Returns None if the font isn't installed, so callers can fall back
+    gracefully instead of crashing on a host that's missing it."""
+    global _emoji_font_cache, _emoji_font_load_attempted
+    if not _emoji_font_load_attempted:
+        _emoji_font_load_attempted = True
+        try:
+            _emoji_font_cache = ImageFont.truetype(NOTO_EMOJI_FONT, NOTO_EMOJI_SIZE)
+        except OSError:
+            _emoji_font_cache = None
+    return _emoji_font_cache
+
 CARD_SIZE = (900, 320)
 BG_COLOR = (24, 24, 28)
 TEXT_COLOR = (255, 255, 255)
@@ -41,6 +69,17 @@ def _truncate(text, max_chars):
     if len(text) <= max_chars:
         return text
     return text[:max_chars - 1] + "…"
+
+
+def _truncate_to_width(draw, text, font, max_width):
+    """Pixel-width-aware truncation, for spots where a fixed character
+    count isn't safe - e.g. a name column next to a variable-width value
+    column, where a char-count limit can still overlap the value text."""
+    if draw.textlength(text, font=font) <= max_width:
+        return text
+    while text and draw.textlength(text + "…", font=font) > max_width:
+        text = text[:-1]
+    return (text + "…") if text else "…"
 
 
 def _gradient_image(size, sampler, low_res=(90, 32)):
@@ -248,6 +287,150 @@ def generate_profile_card(
         f"{exp_into_level} / {exp_needed_for_level} XP to next level",
         font=font_bar, fill=MUTED_COLOR
     )
+
+    buffer = io.BytesIO()
+    card.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
+
+
+def generate_leaderboard_card(title, entries, accent_hex=DEFAULT_ACCENT):
+    """entries: list of {rank, name, avatar_bytes, value_text}, already
+    fetched by the caller (avatar_bytes may be None) - kept pure like
+    generate_profile_card so it doesn't need a live Discord connection to
+    test. Used by /leaderboard (leveling.py) and /richest (aura.py)."""
+    try:
+        accent = hex_to_rgb(accent_hex)
+    except ValueError:
+        accent = hex_to_rgb(DEFAULT_ACCENT)
+
+    row_h = 64
+    header_h = 76
+    pad = 16
+    width = 640
+    height = header_h + row_h * max(len(entries), 1) + pad
+
+    card = _render_background((width, height), DEFAULT_BACKGROUND, accent)
+    draw = ImageDraw.Draw(card)
+
+    font_title = ImageFont.truetype(FONT_BOLD, 30)
+    font_name = ImageFont.truetype(FONT_BOLD, 22)
+    font_value = ImageFont.truetype(FONT_REGULAR, 20)
+    font_rank = ImageFont.truetype(FONT_BOLD, 18)
+    font_empty = ImageFont.truetype(FONT_REGULAR, 20)
+
+    draw.text((pad + 8, 20), title, font=font_title, fill=TEXT_COLOR)
+
+    if not entries:
+        draw.text((pad + 8, header_h + 16), "No data yet.", font=font_empty, fill=MUTED_COLOR)
+
+    avatar_size = 44
+    for i, entry in enumerate(entries):
+        y = header_h + i * row_h
+        row_center_y = y + row_h // 2
+
+        if i % 2 == 0:
+            panel = Image.new("RGBA", card.size, (0, 0, 0, 0))
+            ImageDraw.Draw(panel).rectangle((pad, y + 2, width - pad, y + row_h - 2), fill=(0, 0, 0, 40))
+            card = Image.alpha_composite(card.convert("RGBA"), panel).convert("RGB")
+            draw = ImageDraw.Draw(card)
+
+        badge_color = RANK_BADGE_COLORS.get(entry["rank"], accent)
+        badge_r = 16
+        bx, by = pad + 20, row_center_y
+        draw.ellipse((bx - badge_r, by - badge_r, bx + badge_r, by + badge_r), fill=badge_color)
+        rank_text = str(entry["rank"])
+        tw, th, ty_off = _text_size(draw, rank_text, font_rank)
+        draw.text((bx - tw / 2, by - th / 2 - ty_off), rank_text, font=font_rank, fill=(20, 20, 20))
+
+        avatar_x = pad + 52
+        avatar_y = row_center_y - avatar_size // 2
+        if entry.get("avatar_bytes"):
+            avatar = Image.open(io.BytesIO(entry["avatar_bytes"])).convert("RGB").resize((avatar_size, avatar_size))
+        else:
+            avatar = Image.new("RGB", (avatar_size, avatar_size), accent)
+        card.paste(avatar, (avatar_x, avatar_y), _circle_mask((avatar_size, avatar_size)))
+        draw = ImageDraw.Draw(card)
+
+        value_text = entry["value_text"]
+        value_w, value_h, value_ty_off = _text_size(draw, value_text, font_value)
+        draw.text(
+            (width - pad - 12 - value_w, row_center_y - value_h / 2 - value_ty_off),
+            value_text, font=font_value, fill=MUTED_COLOR
+        )
+
+        name_x = avatar_x + avatar_size + 16
+        # Width-aware, not a fixed char count - the value column's width
+        # varies (a big Aura number vs. "Level 3"), so a fixed character
+        # limit on the name can still run into it.
+        available_name_width = (width - pad - 12 - value_w - 16) - name_x
+        name_text = _truncate_to_width(draw, entry["name"], font_name, available_name_width)
+        tw, th, ty_off = _text_size(draw, name_text, font_name)
+        draw.text((name_x, row_center_y - th / 2 - ty_off), name_text, font=font_name, fill=TEXT_COLOR)
+
+    draw.rounded_rectangle((4, 4, width - 4, height - 4), radius=20, outline=accent, width=3)
+
+    buffer = io.BytesIO()
+    card.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
+
+
+SLOTS_ACCENT = "#e8b923"  # warm gold, casino feel - fixed, not user customization
+
+
+def generate_slots_card(reels, bet, net, new_balance, result_text, won):
+    """reels: the 3 spun emoji. result_text must be plain (no emoji) -
+    drawn with the regular text font, which can't render color emoji;
+    the reels themselves use the color emoji font instead."""
+    accent = hex_to_rgb(SLOTS_ACCENT)
+    width, height = 640, 330
+    card = _render_background((width, height), DEFAULT_BACKGROUND, accent)
+    draw = ImageDraw.Draw(card)
+
+    font_title = ImageFont.truetype(FONT_BOLD, 32)
+    font_result = ImageFont.truetype(FONT_BOLD, 24)
+    font_stats = ImageFont.truetype(FONT_REGULAR, 20)
+    emoji_font = _emoji_font()
+
+    draw.text((24, 20), "SLOTS", font=font_title, fill=TEXT_COLOR)
+
+    box_size = 170  # comfortably fits NotoColorEmoji's fixed ~136x128px glyph
+    gap = 20
+    total_w = box_size * 3 + gap * 2
+    start_x = (width - total_w) // 2
+    reel_y = 68
+
+    for i, symbol in enumerate(reels):
+        bx = start_x + i * (box_size + gap)
+        draw.rounded_rectangle(
+            (bx, reel_y, bx + box_size, reel_y + box_size), radius=16, fill=BAR_BG_COLOR, outline=accent, width=3
+        )
+        if emoji_font:
+            tw, th, ty_off = _text_size(draw, symbol, emoji_font)
+            draw.text(
+                (bx + box_size / 2 - tw / 2, reel_y + box_size / 2 - th / 2 - ty_off),
+                symbol, font=emoji_font, embedded_color=True
+            )
+        else:
+            # Font not installed on this host - better a visible fallback
+            # than a crash. Will render as a tofu box, same DejaVu
+            # limitation documented throughout this file.
+            tw, th, ty_off = _text_size(draw, symbol, font_title)
+            draw.text(
+                (bx + box_size / 2 - tw / 2, reel_y + box_size / 2 - th / 2 - ty_off),
+                symbol, font=font_title, fill=TEXT_COLOR
+            )
+
+    result_y = reel_y + box_size + 24
+    tw, th, ty_off = _text_size(draw, result_text, font_result)
+    draw.text((width / 2 - tw / 2, result_y - ty_off), result_text, font=font_result, fill=accent if won else MUTED_COLOR)
+
+    stats_text = f"Bet: {bet} Aura   •   Net: {'+' if net >= 0 else ''}{net} Aura   •   Balance: {new_balance} Aura"
+    tw, th, ty_off = _text_size(draw, stats_text, font_stats)
+    draw.text((width / 2 - tw / 2, result_y + 38 - ty_off), stats_text, font=font_stats, fill=MUTED_COLOR)
+
+    draw.rounded_rectangle((4, 4, width - 4, height - 4), radius=20, outline=accent, width=3)
 
     buffer = io.BytesIO()
     card.save(buffer, format="PNG")

@@ -4,6 +4,7 @@ from discord import app_commands
 import time
 
 import db
+from cogs.profile.card import generate_leaderboard_card
 
 DEFAULT_COOLDOWN = 8 * 60
 
@@ -190,27 +191,37 @@ class Leveling(commands.Cog):
                 "SELECT user_id, exp, level FROM leveling_accounts WHERE guild_id = ? ORDER BY exp DESC LIMIT 10",
                 (str(interaction.guild.id),)
             ).fetchall()
-            title = f"🏆 Leaderboard - {interaction.guild.name}"
+            title = f"Leaderboard - {interaction.guild.name}"
         else:
             raw_rows = db.connection.execute(
                 "SELECT user_id, SUM(exp) AS exp FROM leveling_accounts GROUP BY user_id ORDER BY exp DESC LIMIT 10"
             ).fetchall()
             rows = [{"user_id": r["user_id"], "exp": r["exp"], "level": self.calculate_level(r["exp"])} for r in raw_rows]
-            title = "🏆 Global Leaderboard (all servers combined)"
+            title = "Global Leaderboard (all servers combined)"
 
         if not rows:
             await interaction.response.send_message("No leveling data yet.", ephemeral=True)
             return
 
-        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-        lines = []
+        await interaction.response.defer()
+
+        entries = []
         for rank, row in enumerate(rows, start=1):
             user = self.bot.get_user(int(row["user_id"]))
             name = user.display_name if user else f"Unknown User ({row['user_id']})"
-            lines.append(f"{medals.get(rank, f'#{rank}')} **{name}** - Level {row['level']} - {row['exp']} XP")
+            avatar_bytes = None
+            if user:
+                try:
+                    avatar_bytes = await user.display_avatar.with_size(128).read()
+                except discord.HTTPException:
+                    avatar_bytes = None
+            entries.append({
+                "rank": rank, "name": name, "avatar_bytes": avatar_bytes,
+                "value_text": f"Level {row['level']} • {row['exp']} XP"
+            })
 
-        embed = discord.Embed(title=title, description="\n".join(lines), color=discord.Color.gold())
-        await interaction.response.send_message(embed=embed)
+        buffer = generate_leaderboard_card(title, entries)
+        await interaction.followup.send(file=discord.File(buffer, filename="leaderboard.png"))
 
 async def setup(bot):
     await bot.add_cog(Leveling(bot))
