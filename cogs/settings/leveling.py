@@ -48,13 +48,19 @@ class Leveling(commands.Cog):
             json.dump(self.server_settings, f, indent=4)
 
     def calculate_level(self, exp):
+        level, _, _ = self.get_level_progress(exp)
+        return level
+
+    def get_level_progress(self, exp):
+        """Returns (level, exp accumulated within that level, exp needed to
+        reach the next level) - used for the /profile XP progress bar."""
         level = 1
         required_exp = 100
         while exp >= required_exp:
             exp -= required_exp
             level += 1
             required_exp = level * 100
-        return level
+        return level, exp, required_exp
 
     def get_user_entry(self, guild_id, user_id):
         guild_id, user_id = str(guild_id), str(user_id)

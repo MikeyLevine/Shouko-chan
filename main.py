@@ -50,6 +50,7 @@ cogs = [
     'cogs.games.trivia',
     'cogs.games.blackjack',
     'cogs.games.slots',
+    'cogs.games.videopoker',
 
     # Economy commands
     'cogs.economy.aura',
@@ -72,6 +73,9 @@ cogs = [
     'cogs.settings.setupdm',
     'cogs.settings.server_command',
     'cogs.settings.server_notify',
+
+    # Profile commands
+    'cogs.profile.profile',
 
     # Utility commands
     'cogs.utility.afk',
