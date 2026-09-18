@@ -38,8 +38,26 @@ PREFIXES = [
     {"id": "gem", "name": "◆", "price": 5000},
     {"id": "skull", "name": "☠", "price": 6000},
 ]
+# ids match cogs/profile/card.py's BACKGROUND_STYLES (minus "midnight",
+# which is the free default and isn't sold here).
+BACKGROUNDS = [
+    {"id": "sunset", "name": "Sunset", "price": 1500},
+    {"id": "ocean", "name": "Ocean", "price": 1500},
+    {"id": "forest", "name": "Forest", "price": 1500},
+    {"id": "carbon", "name": "Carbon", "price": 2000},
+    {"id": "neon", "name": "Neon", "price": 2500},
+    {"id": "galaxy", "name": "Galaxy", "price": 3000},
+]
+
 TITLES_BY_ID = {t["id"]: t for t in TITLES}
 PREFIXES_BY_ID = {p["id"]: p for p in PREFIXES}
+BACKGROUNDS_BY_ID = {b["id"]: b for b in BACKGROUNDS}
+
+# Generalizes buy/equip/inventory across the three item types instead of
+# repeating near-identical branches for each.
+CATALOGS = {"title": TITLES_BY_ID, "prefix": PREFIXES_BY_ID, "background": BACKGROUNDS_BY_ID}
+CATALOG_LISTS = {"title": TITLES, "prefix": PREFIXES, "background": BACKGROUNDS}
+SLOT_COLUMNS = {"title": "equipped_title", "prefix": "equipped_prefix", "background": "equipped_background"}
 
 
 class Shop(commands.Cog):
@@ -75,8 +93,9 @@ class Shop(commands.Cog):
         return row is not None
 
     def get_display_extras(self, guild_id, user_id):
-        """Returns (prefix_text, title_text_or_none, nickname_or_none) for
-        the profile card to render. Used by cogs.profile.profile."""
+        """Returns (prefix_text, title_text_or_none, nickname_or_none,
+        background_id_or_none) for the profile card to render. Used by
+        cogs.profile.profile."""
         row = self.ensure_profile(guild_id, user_id)
         prefix_text = ""
         if row["equipped_prefix"] in PREFIXES_BY_ID:
@@ -84,7 +103,8 @@ class Shop(commands.Cog):
         title_text = None
         if row["equipped_title"] in TITLES_BY_ID:
             title_text = TITLES_BY_ID[row["equipped_title"]]["name"]
-        return prefix_text, title_text, row["nickname"]
+        background_id = row["equipped_background"] if row["equipped_background"] in BACKGROUNDS_BY_ID else None
+        return prefix_text, title_text, row["nickname"], background_id
 
     @app_commands.command(name="shop", description="Browse the Aura shop")
     async def shop(self, interaction: discord.Interaction):
@@ -92,27 +112,20 @@ class Shop(commands.Cog):
             await interaction.response.send_message("This command only works in a server.", ephemeral=True)
             return
 
-        owned_titles = self.get_owned(interaction.guild.id, interaction.user.id, "title")
-        owned_prefixes = self.get_owned(interaction.guild.id, interaction.user.id, "prefix")
-        profile = self.ensure_profile(interaction.guild.id, interaction.user.id)
+        guild_id, user_id = interaction.guild.id, interaction.user.id
+        profile = self.ensure_profile(guild_id, user_id)
 
         embed = discord.Embed(title="🛒 Aura Shop", color=discord.Color.blue())
-        embed.add_field(
-            name="Titles",
-            value="\n".join(
-                f"{'✅ ' if t['id'] in owned_titles else ''}**{t['name']}** - {t['price']} Aura (`{t['id']}`)"
-                for t in TITLES
-            ),
-            inline=False
-        )
-        embed.add_field(
-            name="Prefixes",
-            value="\n".join(
-                f"{'✅ ' if p['id'] in owned_prefixes else ''}**{p['name']}** - {p['price']} Aura (`{p['id']}`)"
-                for p in PREFIXES
-            ),
-            inline=False
-        )
+        for item_type, label in (("title", "Titles"), ("prefix", "Prefixes"), ("background", "Backgrounds")):
+            owned = self.get_owned(guild_id, user_id, item_type)
+            embed.add_field(
+                name=label,
+                value="\n".join(
+                    f"{'✅ ' if item['id'] in owned else ''}**{item['name']}** - {item['price']} Aura (`{item['id']}`)"
+                    for item in CATALOG_LISTS[item_type]
+                ),
+                inline=False
+            )
         embed.add_field(
             name="Custom Nickname",
             value="✅ Unlocked" if profile["nickname_unlocked"] else f"{NICKNAME_TOKEN_PRICE} Aura (`nickname_token`)",
@@ -122,24 +135,22 @@ class Shop(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     async def _buy_autocomplete(self, interaction: discord.Interaction, current: str):
-        owned_titles, owned_prefixes, nickname_unlocked = [], [], False
+        owned = {}
+        nickname_unlocked = False
         if interaction.guild:
-            owned_titles = self.get_owned(interaction.guild.id, interaction.user.id, "title")
-            owned_prefixes = self.get_owned(interaction.guild.id, interaction.user.id, "prefix")
+            for item_type in CATALOGS:
+                owned[item_type] = self.get_owned(interaction.guild.id, interaction.user.id, item_type)
             nickname_unlocked = bool(self.ensure_profile(interaction.guild.id, interaction.user.id)["nickname_unlocked"])
 
         current = current.lower()
         choices = []
-        for t in TITLES:
-            if t["id"] in owned_titles:
-                continue
-            if current in t["id"].lower() or current in t["name"].lower():
-                choices.append(app_commands.Choice(name=f"[Title] {t['name']} - {t['price']} Aura", value=t["id"]))
-        for p in PREFIXES:
-            if p["id"] in owned_prefixes:
-                continue
-            if current in p["id"].lower() or current in p["name"].lower():
-                choices.append(app_commands.Choice(name=f"[Prefix] {p['name']} - {p['price']} Aura", value=p["id"]))
+        for item_type, catalog_list in CATALOG_LISTS.items():
+            label = item_type.capitalize()
+            for item in catalog_list:
+                if item["id"] in owned.get(item_type, []):
+                    continue
+                if current in item["id"].lower() or current in item["name"].lower():
+                    choices.append(app_commands.Choice(name=f"[{label}] {item['name']} - {item['price']} Aura", value=item["id"]))
         if not nickname_unlocked and current in "nickname_token":
             choices.append(app_commands.Choice(
                 name=f"[Unlock] Custom Nickname - {NICKNAME_TOKEN_PRICE} Aura", value="nickname_token"
@@ -161,9 +172,9 @@ class Shop(commands.Cog):
 
         guild_id, user_id = interaction.guild.id, interaction.user.id
 
-        if item in TITLES_BY_ID or item in PREFIXES_BY_ID:
-            item_type = "title" if item in TITLES_BY_ID else "prefix"
-            catalog = TITLES_BY_ID if item_type == "title" else PREFIXES_BY_ID
+        item_type = next((t for t, catalog in CATALOGS.items() if item in catalog), None)
+        if item_type:
+            catalog = CATALOGS[item_type]
             if self.owns(guild_id, user_id, item_type, item):
                 await interaction.response.send_message(f"You already own that {item_type}.", ephemeral=True)
                 return
@@ -209,23 +220,18 @@ class Shop(commands.Cog):
             return
 
         guild_id, user_id = interaction.guild.id, interaction.user.id
-        owned_titles = self.get_owned(guild_id, user_id, "title")
-        owned_prefixes = self.get_owned(guild_id, user_id, "prefix")
         profile = self.ensure_profile(guild_id, user_id)
 
         embed = discord.Embed(title=f"🎒 {interaction.user.display_name}'s Inventory", color=discord.Color.blue())
 
-        titles_text = "\n".join(
-            f"{'▶️ ' if profile['equipped_title'] == t['id'] else ''}{t['name']}"
-            for t in TITLES if t["id"] in owned_titles
-        ) or "None owned"
-        embed.add_field(name="Titles", value=titles_text, inline=False)
-
-        prefixes_text = "\n".join(
-            f"{'▶️ ' if profile['equipped_prefix'] == p['id'] else ''}{p['name']}"
-            for p in PREFIXES if p["id"] in owned_prefixes
-        ) or "None owned"
-        embed.add_field(name="Prefixes", value=prefixes_text, inline=False)
+        for item_type, label in (("title", "Titles"), ("prefix", "Prefixes"), ("background", "Backgrounds")):
+            owned = self.get_owned(guild_id, user_id, item_type)
+            equipped = profile[SLOT_COLUMNS[item_type]]
+            text = "\n".join(
+                f"{'▶️ ' if equipped == item['id'] else ''}{item['name']}"
+                for item in CATALOG_LISTS[item_type] if item["id"] in owned
+            ) or "None owned"
+            embed.add_field(name=label, value=text, inline=False)
 
         embed.add_field(
             name="Nickname",
@@ -234,11 +240,12 @@ class Shop(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="equip", description="Equip an owned title or prefix (leave item blank to unequip)")
+    @app_commands.command(name="equip", description="Equip an owned title, prefix, or background (leave item blank to unequip)")
     @app_commands.describe(category="Which slot to change", item="The item to equip")
     @app_commands.choices(category=[
         app_commands.Choice(name="Title", value="title"),
         app_commands.Choice(name="Prefix", value="prefix"),
+        app_commands.Choice(name="Background", value="background"),
     ])
     async def equip(self, interaction: discord.Interaction, category: app_commands.Choice[str], item: str = None):
         if not interaction.guild:
@@ -247,8 +254,8 @@ class Shop(commands.Cog):
 
         guild_id, user_id = interaction.guild.id, interaction.user.id
         self.ensure_profile(guild_id, user_id)
-        slot_column = "equipped_title" if category.value == "title" else "equipped_prefix"
-        catalog = TITLES_BY_ID if category.value == "title" else PREFIXES_BY_ID
+        slot_column = SLOT_COLUMNS[category.value]
+        catalog = CATALOGS[category.value]
 
         if item is None:
             db.connection.execute(
@@ -274,19 +281,16 @@ class Shop(commands.Cog):
     async def equip_item_autocomplete(self, interaction: discord.Interaction, current: str):
         if not interaction.guild:
             return []
-        owned_titles = self.get_owned(interaction.guild.id, interaction.user.id, "title")
-        owned_prefixes = self.get_owned(interaction.guild.id, interaction.user.id, "prefix")
         category = getattr(interaction.namespace, "category", None)
         current = current.lower()
         choices = []
-        if category != "prefix":
-            for t in TITLES:
-                if t["id"] in owned_titles and current in t["name"].lower():
-                    choices.append(app_commands.Choice(name=t["name"], value=t["id"]))
-        if category != "title":
-            for p in PREFIXES:
-                if p["id"] in owned_prefixes and current in p["name"].lower():
-                    choices.append(app_commands.Choice(name=p["name"], value=p["id"]))
+        for item_type, catalog_list in CATALOG_LISTS.items():
+            if category and category != item_type:
+                continue
+            owned = self.get_owned(interaction.guild.id, interaction.user.id, item_type)
+            for item in catalog_list:
+                if item["id"] in owned and current in item["name"].lower():
+                    choices.append(app_commands.Choice(name=item["name"], value=item["id"]))
         return choices[:25]
 
     @app_commands.command(name="setnickname", description="Set your custom profile card nickname (requires the Nickname unlock)")

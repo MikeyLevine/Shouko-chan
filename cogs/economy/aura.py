@@ -85,6 +85,20 @@ class Aura(commands.Cog):
         db.connection.commit()
         return self.get_balance(guild_id, user_id)
 
+    def remove_balance(self, guild_id, user_id, amount):
+        """Returns False (and leaves the balance untouched) if funds are
+        insufficient, True if the amount was deducted. Used by every game
+        and /buy to spend Aura."""
+        entry = self.ensure_account(guild_id, user_id)
+        if entry["balance"] < amount:
+            return False
+        db.connection.execute(
+            "UPDATE aura_accounts SET balance = balance - ? WHERE guild_id = ? AND user_id = ?",
+            (amount, str(guild_id), str(user_id))
+        )
+        db.connection.commit()
+        return True
+
     def set_balance(self, guild_id, user_id, amount):
         """Clamps to 0 - used by owner tools that adjust a balance directly
         rather than earning/spending it."""

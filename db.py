@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS server_settings (
 CREATE TABLE IF NOT EXISTS shop_owned_items (
     guild_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
-    item_type TEXT NOT NULL CHECK (item_type IN ('title', 'prefix')),
+    item_type TEXT NOT NULL CHECK (item_type IN ('title', 'prefix', 'background')),
     item_id TEXT NOT NULL,
     PRIMARY KEY (guild_id, user_id, item_type, item_id)
 );
@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS shop_profile (
     nickname_unlocked INTEGER NOT NULL DEFAULT 0,
     equipped_title TEXT,
     equipped_prefix TEXT,
+    equipped_background TEXT,
     nickname TEXT,
     PRIMARY KEY (guild_id, user_id)
 );
@@ -221,8 +222,43 @@ CREATE TABLE IF NOT EXISTS bot_config (
 """
 
 
+def _ensure_column(table, column, coltype):
+    """CREATE TABLE IF NOT EXISTS doesn't retroactively add columns to a
+    table that already exists - needed when a schema change adds a field
+    to something already live in dev/prod."""
+    cols = [row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()]
+    if column not in cols:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+
+
+def _widen_shop_owned_items_check():
+    """Adding the 'background' item type widened this table's CHECK
+    constraint, but SQLite can't ALTER a CHECK constraint directly - the
+    standard workaround is rebuild-and-swap. Only runs against a database
+    that still has the old, narrower constraint; fresh databases already
+    get the new one from CREATE TABLE above."""
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='shop_owned_items'"
+    ).fetchone()
+    if row and "'background'" not in row[0]:
+        connection.executescript("""
+            ALTER TABLE shop_owned_items RENAME TO shop_owned_items_old;
+            CREATE TABLE shop_owned_items (
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                item_type TEXT NOT NULL CHECK (item_type IN ('title', 'prefix', 'background')),
+                item_id TEXT NOT NULL,
+                PRIMARY KEY (guild_id, user_id, item_type, item_id)
+            );
+            INSERT INTO shop_owned_items SELECT * FROM shop_owned_items_old;
+            DROP TABLE shop_owned_items_old;
+        """)
+
+
 def init_db():
     connection.executescript(SCHEMA)
+    _ensure_column("shop_profile", "equipped_background", "TEXT")
+    _widen_shop_owned_items_check()
     connection.commit()
 
 

@@ -69,9 +69,9 @@ class Profile(commands.Cog):
         profile_data = self.get_entry(target.id)
 
         shop_cog = self.bot.get_cog("Shop")
-        prefix_text, title_text, nickname = ("", None, None)
+        prefix_text, title_text, nickname, background_id = ("", None, None, None)
         if shop_cog:
-            prefix_text, title_text, nickname = shop_cog.get_display_extras(interaction.guild.id, target.id)
+            prefix_text, title_text, nickname, background_id = shop_cog.get_display_extras(interaction.guild.id, target.id)
 
         try:
             avatar_bytes = await target.display_avatar.with_size(256).read()
@@ -91,6 +91,7 @@ class Profile(commands.Cog):
             accent_hex=profile_data["color"],
             prefix_text=prefix_text,
             title_text=title_text,
+            background_id=background_id,
         )
 
         await interaction.followup.send(file=discord.File(buffer, filename="profile.png"))

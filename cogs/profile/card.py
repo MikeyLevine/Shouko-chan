@@ -2,6 +2,8 @@
 it can be exercised in tests without a live Discord connection."""
 import io
 import os
+import random
+import zlib
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "fonts")
@@ -41,11 +43,91 @@ def _truncate(text, max_chars):
     return text[:max_chars - 1] + "…"
 
 
-def _draw_gradient_background(draw, size, color1, color2):
-    width, height = size
-    for x in range(width):
-        t = x / (width - 1)
-        draw.line([(x, 0), (x, height)], fill=_blend(color1, color2, t))
+def _gradient_image(size, sampler, low_res=(90, 32)):
+    """Renders `sampler(x_frac, y_frac) -> (r,g,b)` at low resolution then
+    upscales with bilinear interpolation - gives a smooth gradient (even a
+    diagonal or radial one) without a per-pixel loop at full card size."""
+    lw, lh = low_res
+    small = Image.new("RGB", (lw, lh))
+    pixels = small.load()
+    for y in range(lh):
+        for x in range(lw):
+            pixels[x, y] = sampler(x / (lw - 1), y / (lh - 1))
+    return small.resize(size, Image.BILINEAR)
+
+
+def _add_stars(image, seed, count=45, color=(255, 255, 255)):
+    rng = random.Random(seed)
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    for _ in range(count):
+        x, y = rng.randint(0, image.width), rng.randint(0, image.height)
+        r = rng.choice([1, 1, 1, 2, 2, 3])
+        alpha = rng.randint(110, 255)
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=color + (alpha,))
+    return Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+
+
+def _add_diagonal_stripes(image, color, alpha=16, spacing=46, width=16):
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    w, h = image.size
+    for x in range(-h, w, spacing):
+        draw.line([(x, 0), (x + h, h)], fill=color + (alpha,), width=width)
+    return Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+
+
+# Purchasable background styles (cogs/economy/shop.py BACKGROUNDS catalog
+# mirrors these ids). "midnight" is the free default - it tints toward the
+# user's own accent color, same as before this feature existed. Every other
+# style has its own fixed palette, independent of /setcolor - accent still
+# controls the avatar ring/border/progress bar/title regardless of which
+# background is equipped, so the two customizations layer rather than
+# compete. Stars/stripes use a fixed seed (not random per render) so a
+# style looks the same every time, not different on every /profile call.
+BACKGROUND_STYLES = {
+    "midnight": {"name": "Midnight", "accent_tinted": True, "direction": "horizontal"},
+    "sunset": {"name": "Sunset", "colors": ((255, 94, 77), (60, 20, 90)), "direction": "horizontal"},
+    "ocean": {"name": "Ocean", "colors": ((10, 25, 47), (0, 120, 140)), "direction": "vertical"},
+    "forest": {"name": "Forest", "colors": ((8, 26, 18), (24, 90, 48)), "direction": "diagonal"},
+    "neon": {"name": "Neon", "colors": ((255, 0, 150), (0, 220, 255)), "direction": "diagonal"},
+    "carbon": {"name": "Carbon", "colors": ((18, 18, 20), (30, 30, 34)), "direction": "diagonal", "stripes": True},
+    "galaxy": {"name": "Galaxy", "colors": ((10, 5, 25), (45, 15, 70)), "direction": "radial", "stars": True},
+}
+DEFAULT_BACKGROUND = "midnight"
+
+
+def _render_background(size, background_id, accent):
+    style = BACKGROUND_STYLES.get(background_id, BACKGROUND_STYLES[DEFAULT_BACKGROUND])
+
+    if style.get("accent_tinted"):
+        color1, color2 = BG_COLOR, _blend(BG_COLOR, accent, 0.16)
+    else:
+        color1, color2 = style["colors"]
+
+    direction = style["direction"]
+    if direction == "horizontal":
+        sampler = lambda xf, yf: _blend(color1, color2, xf)
+    elif direction == "vertical":
+        sampler = lambda xf, yf: _blend(color1, color2, yf)
+    elif direction == "diagonal":
+        sampler = lambda xf, yf: _blend(color1, color2, (xf + yf) / 2)
+    else:  # radial, glow centered near the avatar
+        def sampler(xf, yf, cx=0.15, cy=0.3):
+            d = min((((xf - cx) ** 2 + (yf - cy) ** 2) ** 0.5) / 0.9, 1.0)
+            return _blend(color1, color2, d)
+
+    image = _gradient_image(size, sampler)
+
+    if style.get("stars"):
+        # zlib.crc32, not the builtin hash() - that's randomized per
+        # process (PYTHONHASHSEED), which would make the star pattern
+        # shuffle on every bot restart instead of staying put.
+        image = _add_stars(image, seed=zlib.crc32((background_id + "-stars").encode()))
+    if style.get("stripes"):
+        image = _add_diagonal_stripes(image, color=(255, 255, 255))
+
+    return image
 
 
 def _draw_avatar_glow(card, center, radius, color):
@@ -76,20 +158,15 @@ def generate_profile_card(
     accent_hex,
     prefix_text="",
     title_text=None,
+    background_id=DEFAULT_BACKGROUND,
 ):
     try:
         accent = hex_to_rgb(accent_hex)
     except ValueError:
         accent = hex_to_rgb(DEFAULT_ACCENT)
 
-    card = Image.new("RGB", CARD_SIZE, BG_COLOR)
+    card = _render_background(CARD_SIZE, background_id or DEFAULT_BACKGROUND, accent)
     draw = ImageDraw.Draw(card)
-
-    # Subtle horizontal gradient toward a faint accent tint, rather than a
-    # flat fill - keeps the accent color present throughout the card
-    # without competing with the text drawn on top of it.
-    gradient_end = _blend(BG_COLOR, accent, 0.16)
-    _draw_gradient_background(draw, CARD_SIZE, BG_COLOR, gradient_end)
 
     avatar_size = 180
     avatar_pos = (40, 70)
@@ -126,6 +203,16 @@ def generate_profile_card(
     draw.rounded_rectangle((4, 4, CARD_SIZE[0] - 4, CARD_SIZE[1] - 4), radius=22, outline=accent, width=3)
 
     text_x = avatar_pos[0] + avatar_size + 40
+
+    # Translucent panel behind the text column - keeps text readable
+    # regardless of background style (a bright style like Neon would
+    # otherwise wash out the accent-colored title/progress-bar text).
+    panel = Image.new("RGBA", card.size, (0, 0, 0, 0))
+    ImageDraw.Draw(panel).rounded_rectangle(
+        (text_x - 16, 16, CARD_SIZE[0] - 16, CARD_SIZE[1] - 16), radius=18, fill=(0, 0, 0, 90)
+    )
+    card = Image.alpha_composite(card.convert("RGBA"), panel).convert("RGB")
+    draw = ImageDraw.Draw(card)
 
     font_name = ImageFont.truetype(FONT_BOLD, 42)
     font_label = ImageFont.truetype(FONT_REGULAR, 22)
